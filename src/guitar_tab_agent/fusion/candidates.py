@@ -1,14 +1,27 @@
-"""Pitch-to-position candidate generation."""
+"""Pitch-to-string/fret candidate generation.
+
+The default tuning is six-string standard tuning from high to low string:
+
+- string 1: E4, MIDI 64
+- string 2: B3, MIDI 59
+- string 3: G3, MIDI 55
+- string 4: D3, MIDI 50
+- string 5: A2, MIDI 45
+- string 6: E2, MIDI 40
+"""
 
 from __future__ import annotations
 
 from guitar_tab_agent.schema import STANDARD_TUNING_MIDI, StringFretCandidate
 
 
+DEFAULT_MAX_FRET = 24
+
+
 def candidate_positions_for_midi(
     midi_pitch: int,
     *,
-    max_fret: int = 24,
+    max_fret: int = DEFAULT_MAX_FRET,
 ) -> tuple[StringFretCandidate, ...]:
     """Return all standard-tuning positions that can play a MIDI pitch."""
 
