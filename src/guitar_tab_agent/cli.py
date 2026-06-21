@@ -52,7 +52,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps([asdict(position) for position in positions], indent=2))
         else:
             for position in positions:
-                print(f"string={position.string_number} fret={position.fret_number}")
+                print(f"string={position.string} fret={position.fret}")
         return 0
 
     parser.print_help()

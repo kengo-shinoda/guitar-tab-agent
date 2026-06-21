@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from guitar_tab_agent.models import TabEvent
+from guitar_tab_agent.schema import DecodedTabEvent
 
 
 _STRING_LABELS = {
@@ -17,29 +17,26 @@ _STRING_LABELS = {
 }
 
 
-def render_ascii_tab(events: Sequence[TabEvent]) -> str:
+def render_ascii_tab(events: Sequence[DecodedTabEvent]) -> str:
     """Render positioned events as a simple six-line ASCII TAB."""
 
-    positioned_events = sorted(
-        (event for event in events if event.position is not None),
-        key=lambda event: event.note.onset,
-    )
+    positioned_events = sorted(events, key=lambda event: event.start)
     columns = [
         (
-            event.position.string_number,
-            str(event.position.fret_number),
-            max(2, len(str(event.position.fret_number))),
+            event.string,
+            str(event.fret),
+            max(2, len(str(event.fret))),
         )
         for event in positioned_events
-        if event.position is not None
     ]
 
     lines: list[str] = []
     for string_number in range(1, 7):
         body = ""
-        for event_string, token, width in columns:
+        for index, (event_string, token, width) in enumerate(columns):
             body += token.ljust(width, "-") if event_string == string_number else "-" * width
-            body += "-"
+            if index < len(columns) - 1:
+                body += "-"
         lines.append(f"{_STRING_LABELS[string_number]}|{body}")
 
     return "\n".join(lines)

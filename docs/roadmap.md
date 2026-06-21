@@ -12,9 +12,9 @@ Create a stable foundation for later audio, video, fusion, and output work. Esta
 
 - Product requirements, architecture, evaluation, and roadmap docs.
 - Root `AGENTS.md` with project rules.
-- Python package skeleton.
-- Initial internal schemas for `NoteEvent`, string/fret candidates, and TAB events.
-- `tabgen` CLI skeleton.
+- Python package skeleton under `src/guitar_tab_agent/`.
+- Initial internal schemas for `NoteEvent`, `StringFretCandidate`, and `DecodedTabEvent` in `src/guitar_tab_agent/schema.py`.
+- `tabgen` CLI skeleton backed by `src/guitar_tab_agent/cli.py`.
 - Standard-tuning pitch-to-string/fret candidate generation.
 - Basic ASCII TAB rendering from synthetic or provided note events.
 - Unit tests for schemas, candidate generation, CLI behavior, and rendering.
@@ -25,7 +25,7 @@ Create a stable foundation for later audio, video, fusion, and output work. Esta
 - The CLI exposes at least a help/version path and one safe development command.
 - Standard-tuning candidate generation is deterministic and tested.
 - ASCII TAB output can be produced from a small synthetic fixture.
-- Tests run without network access, GPU access, or real audio/video files.
+- `uv run pytest` passes without network access, GPU access, or real audio/video files.
 
 ### Risks
 
@@ -137,7 +137,7 @@ Improve robustness for guitar-forward recordings and add richer output options a
 
 - Source separation is optional and documented.
 - Right-hand evidence can influence string choice in controlled tests.
-- Exported files are generated from the same internal `TabEvent` representation.
+- Exported files are generated from the same internal `DecodedTabEvent` representation.
 - Existing JSON and ASCII TAB outputs remain stable.
 - Tests pass when optional dependencies are unavailable.
 

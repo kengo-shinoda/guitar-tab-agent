@@ -35,11 +35,14 @@ The MVP target is not perfect publication-quality notation. The MVP target is a 
 
 ## Architecture
 
-- `src/tabgen/audio/`: audio extraction and audio-to-note adapters.
-- `src/tabgen/video/`: frame extraction, calibration, hand tracking.
-- `src/tabgen/fusion/`: string/fret candidate generation, cost model, decoding.
-- `src/tabgen/tab/`: TAB rendering and export.
-- `src/tabgen/cli.py`: command-line interface.
+- Python package name: `guitar_tab_agent`.
+- CLI command name: `tabgen`.
+- `tabgen` is the command-line executable, not the Python package name.
+- `src/guitar_tab_agent/audio/`: audio extraction and audio-to-note adapters.
+- `src/guitar_tab_agent/video/`: frame extraction, calibration, hand tracking.
+- `src/guitar_tab_agent/fusion/`: string/fret candidate generation, cost model, decoding.
+- `src/guitar_tab_agent/tab/`: TAB rendering and export.
+- `src/guitar_tab_agent/cli.py`: command-line interface backing the `tabgen` command.
 - `docs/`: product requirements, architecture, evaluation, roadmap.
 - `tests/`: unit and integration tests.
 
@@ -58,6 +61,7 @@ The MVP target is not perfect publication-quality notation. The MVP target is a 
 
 ## Testing rules
 
+- Primary test command: `uv run pytest`.
 - Prefer unit tests with mocks or synthetic fixtures.
 - Avoid requiring large audio/video files in unit tests.
 - Avoid network access in tests.
