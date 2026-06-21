@@ -16,7 +16,7 @@ class CliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(
             json.loads(output.getvalue()),
-            [{"string_number": 1, "fret_number": 0}],
+            [{"string": 1, "fret": 0, "pitch_midi": 64, "confidence": None}],
         )
 
     def test_no_command_prints_help(self) -> None:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Sequence
 
-from guitar_tab_agent.models import NoteEvent
+from guitar_tab_agent.schema import NoteEvent
 
 
 def extract_note_events(_media_path: Path) -> Sequence[NoteEvent]:

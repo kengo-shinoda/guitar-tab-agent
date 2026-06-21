@@ -24,7 +24,8 @@ src/guitar_tab_agent/
   fusion/     string/fret candidate generation, scoring, and decoding
   tab/        ASCII TAB rendering and later export adapters
   cli.py      implementation for the `tabgen` command
-  models.py   current shared dataclass module
+  schema.py   canonical shared dataclasses
+  models.py   compatibility wrappers for early skeleton APIs
 ```
 
 The Python package is `guitar_tab_agent`. The CLI command is `tabgen`; do not rename the package to `tabgen`.
@@ -67,7 +68,7 @@ Intermediate files should be serializable so later steps can be rerun without re
 
 Schemas should be small, typed, and stable. Dataclasses are enough for the initial implementation; pydantic should not be added unless validation needs justify it.
 
-The current skeleton keeps shared dataclasses in `src/guitar_tab_agent/models.py`. Phase 0 schema work should converge on the names below, either in that module or in a dedicated `src/guitar_tab_agent/schema.py` once the migration is explicit and tested.
+Canonical shared dataclasses live in `src/guitar_tab_agent/schema.py`. `src/guitar_tab_agent/models.py` may keep temporary compatibility wrappers while early skeleton APIs are migrated.
 
 ### `NoteEvent`
 
@@ -83,21 +84,23 @@ Produced by the audio module.
 
 Produced by manual calibration in the video module.
 
-- `video_width`: source frame width in pixels.
-- `video_height`: source frame height in pixels.
-- `timestamp_sec`: frame time used for calibration.
-- `string_lines`: six string center lines in image coordinates.
-- `fret_lines`: fret boundaries in image coordinates.
-- `orientation`: camera/fretboard orientation metadata.
+- `nut_string_6`: optional image-space point.
+- `nut_string_1`: optional image-space point.
+- `bridge_string_6`: optional image-space point.
+- `bridge_string_1`: optional image-space point.
+- `timestamp`: optional frame time used for calibration.
+
+Perspective transforms and normalized fretboard mapping are future video-module work, not part of the schema layer.
 
 ### `HandLandmarkFrame`
 
 Produced by video hand tracking.
 
-- `timestamp_sec`: frame timestamp.
-- `landmarks`: named hand landmarks in image coordinates.
-- `confidence`: detection confidence.
-- `handedness`: optional left/right hand classification.
+- `timestamp`: frame timestamp.
+- `landmarks`: named project-level landmarks as `(name, x, y)` tuples.
+- `confidence`: optional detection confidence.
+
+MediaPipe-specific objects must stay inside the video adapter layer.
 
 ### `VideoEvidence`
 
@@ -128,8 +131,8 @@ Selected output event.
 - `fret`: selected fret.
 - `pitch_midi`: selected MIDI pitch.
 - `confidence`: confidence in the selected placement.
-- `score_breakdown`: transparent scoring details.
-- `needs_review`: boolean marker for uncertain events.
+
+Score breakdowns and `needs_review` markers are planned decoder/review-output extensions.
 
 ## 4. Module Boundaries
 

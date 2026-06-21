@@ -13,7 +13,7 @@ Create a stable foundation for later audio, video, fusion, and output work. Esta
 - Product requirements, architecture, evaluation, and roadmap docs.
 - Root `AGENTS.md` with project rules.
 - Python package skeleton under `src/guitar_tab_agent/`.
-- Initial internal schemas for `NoteEvent`, `StringFretCandidate`, and `DecodedTabEvent`.
+- Initial internal schemas for `NoteEvent`, `StringFretCandidate`, and `DecodedTabEvent` in `src/guitar_tab_agent/schema.py`.
 - `tabgen` CLI skeleton backed by `src/guitar_tab_agent/cli.py`.
 - Standard-tuning pitch-to-string/fret candidate generation.
 - Basic ASCII TAB rendering from synthetic or provided note events.
