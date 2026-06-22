@@ -167,6 +167,65 @@ class CliTest(unittest.TestCase):
                 ],
             )
 
+    def test_audio_to_notes_writes_only_filtered_note_event_json(self) -> None:
+        original_transcribe = cli.transcribe_audio_to_notes
+        cli.transcribe_audio_to_notes = lambda audio_path: [
+            NoteEvent(
+                start=0.0,
+                end=0.25,
+                pitch_midi=64,
+                confidence=0.54,
+                source="basic_pitch",
+            ),
+            NoteEvent(
+                start=0.5,
+                end=0.75,
+                pitch_midi=65,
+                confidence=0.55,
+                source="basic_pitch",
+            ),
+            NoteEvent(
+                start=1.0,
+                end=1.25,
+                pitch_midi=89,
+                confidence=0.99,
+                source="basic_pitch",
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = Path(tmpdir) / "notes.json"
+            try:
+                exit_code = main(
+                    [
+                        "audio-to-notes",
+                        "input.wav",
+                        "--out",
+                        str(out_path),
+                        "--min-confidence",
+                        "0.55",
+                        "--min-pitch",
+                        "40",
+                        "--max-pitch",
+                        "88",
+                    ]
+                )
+            finally:
+                cli.transcribe_audio_to_notes = original_transcribe
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(
+                json.loads(out_path.read_text(encoding="utf-8")),
+                [
+                    {
+                        "start": 0.5,
+                        "end": 0.75,
+                        "pitch_midi": 65,
+                        "confidence": 0.55,
+                        "source": "basic_pitch",
+                    }
+                ],
+            )
+
     def test_audio_to_notes_prints_stdout_without_output_file(self) -> None:
         original_transcribe = cli.transcribe_audio_to_notes
         cli.transcribe_audio_to_notes = lambda audio_path: [
@@ -227,6 +286,52 @@ class CliTest(unittest.TestCase):
                 "e|0--\nB|---\nG|---\nD|---\nA|--0\nE|---",
             )
 
+    def test_audio_to_tab_decodes_only_filtered_notes(self) -> None:
+        original_transcribe = cli.transcribe_audio_to_notes
+        cli.transcribe_audio_to_notes = lambda audio_path: [
+            NoteEvent(
+                start=0.0,
+                end=0.25,
+                pitch_midi=32,
+                confidence=0.99,
+                source="basic_pitch",
+            ),
+            NoteEvent(
+                start=0.25,
+                end=0.5,
+                pitch_midi=64,
+                confidence=0.9,
+                source="basic_pitch",
+            ),
+            NoteEvent(
+                start=0.5,
+                end=0.55,
+                pitch_midi=65,
+                confidence=0.9,
+                source="basic_pitch",
+            ),
+        ]
+        output = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(output):
+                exit_code = main(
+                    [
+                        "audio-to-tab",
+                        "input.wav",
+                        "--min-pitch",
+                        "40",
+                        "--max-pitch",
+                        "88",
+                        "--min-duration",
+                        "0.1",
+                    ]
+                )
+        finally:
+            cli.transcribe_audio_to_notes = original_transcribe
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(output.getvalue(), "e|-0\nB|--\nG|--\nD|--\nA|--\nE|--\n")
+
     def test_audio_to_tab_prints_stdout_without_output_file(self) -> None:
         original_transcribe = cli.transcribe_audio_to_notes
         cli.transcribe_audio_to_notes = lambda audio_path: [
@@ -263,6 +368,45 @@ class CliTest(unittest.TestCase):
 
         self.assertEqual(exit_code, 1)
         self.assertIn("error: Basic Pitch is not installed", errors.getvalue())
+
+    def test_audio_command_invalid_threshold_combination_is_readable_error(self) -> None:
+        def fail_if_called(audio_path: Path) -> list[NoteEvent]:
+            raise AssertionError("transcription should not run for invalid thresholds")
+
+        original_transcribe = cli.transcribe_audio_to_notes
+        cli.transcribe_audio_to_notes = fail_if_called
+        errors = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(errors):
+                exit_code = main(
+                    [
+                        "audio-to-notes",
+                        "input.wav",
+                        "--min-pitch",
+                        "89",
+                        "--max-pitch",
+                        "88",
+                    ]
+                )
+        finally:
+            cli.transcribe_audio_to_notes = original_transcribe
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn(
+            "error: min_pitch must be less than or equal to max_pitch",
+            errors.getvalue(),
+        )
+
+    def test_audio_command_invalid_min_confidence_is_readable_error(self) -> None:
+        errors = io.StringIO()
+
+        with contextlib.redirect_stderr(errors):
+            exit_code = main(
+                ["audio-to-tab", "input.wav", "--min-confidence", "1.1"]
+            )
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("error: min_confidence", errors.getvalue())
 
 
 if __name__ == "__main__":
