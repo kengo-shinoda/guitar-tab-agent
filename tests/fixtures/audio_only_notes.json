@@ -1,0 +1,23 @@
+[
+  {
+    "start": 0.0,
+    "end": 0.25,
+    "pitch_midi": 64,
+    "confidence": 1.0,
+    "source": "smoke-fixture"
+  },
+  {
+    "start": 0.25,
+    "end": 0.5,
+    "pitch_midi": 65,
+    "confidence": 0.95,
+    "source": "smoke-fixture"
+  },
+  {
+    "start": 0.5,
+    "end": 0.75,
+    "pitch_midi": 67,
+    "confidence": 0.9,
+    "source": "smoke-fixture"
+  }
+]
