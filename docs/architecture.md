@@ -134,7 +134,25 @@ Selected output event.
 
 Score breakdowns and `needs_review` markers are planned decoder/review-output extensions.
 
-## 4. Module Boundaries
+## 4. Future Instrument and Tuning Profiles
+
+Phase 0 and Phase 1 remain fixed to six-string standard-tuning guitar. The current candidate generation, decoder, ASCII renderer, and CLI should not claim support for 7-string guitar, bass guitar, or custom tunings yet.
+
+Future support should be introduced through a small `InstrumentProfile` design rather than scattered constants. A profile may eventually describe:
+
+- instrument family, such as guitar or bass;
+- string count;
+- string labels in display order;
+- open-string MIDI pitches for the selected tuning;
+- tuning name or user-provided tuning metadata;
+- configurable maximum fret;
+- validation rules for playable string/fret ranges.
+
+Future profiles may cover standard 6-string guitar, 7-string guitar, 4/5/6-string bass, custom tunings, arbitrary string labels, and different maximum fret limits. This design should be added only when an issue explicitly asks for it and includes tests that protect existing six-string standard-tuning behavior.
+
+Until then, new code may continue to use the current six-string standard-tuning assumptions. However, when a small local abstraction is easy, prefer it over unnecessary hard-coding that would make a later `InstrumentProfile` migration noisy. Do not introduce broad profile plumbing speculatively.
+
+## 5. Module Boundaries
 
 ### Audio
 
@@ -162,7 +180,7 @@ Initial MVP can use manual calibration and mocked/synthetic visual evidence befo
 
 Responsibilities:
 
-- Enumerate valid string/fret candidates from each `NoteEvent` under standard tuning.
+- Enumerate valid string/fret candidates from each `NoteEvent` under the current six-string standard-tuning MVP constraint.
 - Combine pitch constraints, left-hand likelihood, right-hand likelihood, playability prior, and transition cost.
 - Decode a sequence of `DecodedTabEvent` records.
 - Preserve score breakdowns for debugging and correction.
@@ -208,7 +226,7 @@ Responsibilities:
 
 The web UI should call the same core modules as the CLI rather than duplicating pipeline logic.
 
-## 5. Coordinate Systems
+## 6. Coordinate Systems
 
 Time coordinates:
 
@@ -225,7 +243,7 @@ Image coordinates:
 
 Fretboard coordinates:
 
-- String numbering follows guitar TAB convention: string 1 is high E, string 6 is low E.
+- For the MVP, string numbering follows six-string guitar TAB convention: string 1 is high E, string 6 is low E.
 - Fret numbering starts at 0 for open strings.
 - Standard tuning MIDI pitches are explicit:
   - string 1: E4, MIDI 64
@@ -234,10 +252,11 @@ Fretboard coordinates:
   - string 4: D3, MIDI 50
   - string 5: A2, MIDI 45
   - string 6: E2, MIDI 40
+- Future `InstrumentProfile` support should derive labels, open-string pitches, string count, and maximum fret from profile data rather than from this MVP list.
 
 Calibration must record enough orientation metadata to map image-space landmarks to string/fret regions without assuming a fixed left-to-right neck direction.
 
-## 6. Error Handling
+## 7. Error Handling
 
 Errors should be explicit and recoverable when possible.
 
@@ -250,7 +269,7 @@ Errors should be explicit and recoverable when possible.
 
 Modules should avoid swallowing errors from external tools. Wrap them with project-specific messages while preserving enough diagnostic detail for debugging.
 
-## 7. Dependency Policy
+## 8. Dependency Policy
 
 - Prefer existing OSS tools and pretrained models.
 - Keep heavy dependencies behind adapter modules.
@@ -267,7 +286,7 @@ Likely dependency boundaries:
 - MediaPipe: hand landmark detection.
 - Demucs: optional future guitar stem separation.
 
-## 8. Testing Strategy
+## 9. Testing Strategy
 
 Testing should favor deterministic fixtures and small module boundaries.
 
@@ -283,7 +302,7 @@ Testing should favor deterministic fixtures and small module boundaries.
 
 Each module should be testable without running the full pipeline.
 
-## 9. Future Extensions
+## 10. Future Extensions
 
 - Viterbi or beam search sequence decoding.
 - Polyphonic note grouping and chord-aware fingering.
@@ -291,7 +310,7 @@ Each module should be testable without running the full pipeline.
 - Better left-hand likelihood using MediaPipe landmarks and calibrated fretboard geometry.
 - Optional Demucs preprocessing for guitar-forward but noisy recordings.
 - Support for bends, slides, hammer-ons, pull-offs, vibrato, harmonics, and tapping.
-- Alternate tunings with explicit tuning metadata.
+- `InstrumentProfile` support for alternate tunings, 7-string guitar, bass guitar, arbitrary string labels, and configurable maximum frets.
 - MusicXML and GuitarPro export.
 - Interactive web UI for calibration, correction, and playback.
 - Confidence visualization and human-in-the-loop correction history.

@@ -8,6 +8,8 @@ This roadmap keeps the project practical for iterative work by coding agents. Ea
 
 Create a stable foundation for later audio, video, fusion, and output work. Establish the core data shapes and prove a minimal audio-only path can produce editable TAB-like output from note events.
 
+Phase 0 is limited to six-string standard-tuning guitar.
+
 ### Deliverables
 
 - Product requirements, architecture, evaluation, and roadmap docs.
@@ -26,6 +28,7 @@ Create a stable foundation for later audio, video, fusion, and output work. Esta
 - Standard-tuning candidate generation is deterministic and tested.
 - ASCII TAB output can be produced from a small synthetic fixture.
 - `uv run pytest` passes without network access, GPU access, or real audio/video files.
+- No 7-string guitar, bass guitar, or custom tuning support is claimed.
 
 ### Risks
 
@@ -36,6 +39,7 @@ Create a stable foundation for later audio, video, fusion, and output work. Esta
 ### What Should Not Be Done Yet
 
 - Do not implement full video processing.
+- Do not implement 7-string guitar, bass guitar, or custom tuning support.
 - Do not add a web UI.
 - Do not add custom model training.
 - Do not claim support for YouTube or arbitrary videos.
@@ -46,6 +50,8 @@ Create a stable foundation for later audio, video, fusion, and output work. Esta
 ### Goal
 
 Add the first useful video signal: a manually calibrated fretboard and time-aligned left-hand evidence that can later guide string/fret selection.
+
+Phase 1 remains limited to six-string standard-tuning guitar. Video calibration and coordinate work should avoid unnecessary hard-coding where a small abstraction is easy, but it should not implement multi-instrument or custom-tuning behavior.
 
 ### Deliverables
 
@@ -79,6 +85,7 @@ Add the first useful video signal: a manually calibrated fretboard and time-alig
 - Do not rely on large real video fixtures in unit tests.
 - Do not implement right-hand inference yet.
 - Do not support arbitrary camera motion.
+- Do not implement 7-string guitar, bass guitar, or custom tuning support yet.
 
 ## Phase 2: Fusion Decoder, Synchronized Review Output, Better Confidence
 
@@ -131,6 +138,7 @@ Improve robustness for guitar-forward recordings and add richer output options a
 - Right-hand string likelihood prototype.
 - Integration of right-hand likelihood into fusion scoring.
 - Export adapters for MusicXML and/or GuitarPro-compatible formats, after JSON and ASCII TAB are stable.
+- Design and implement `InstrumentProfile` support only if the six-string pipeline is stable enough to preserve existing behavior.
 - Graceful skip behavior for optional heavy dependencies.
 
 ### Acceptance Criteria
@@ -139,6 +147,7 @@ Improve robustness for guitar-forward recordings and add richer output options a
 - Right-hand evidence can influence string choice in controlled tests.
 - Exported files are generated from the same internal `DecodedTabEvent` representation.
 - Existing JSON and ASCII TAB outputs remain stable.
+- Any 7-string guitar, bass guitar, or custom tuning support is profile-driven and covered by regression tests.
 - Tests pass when optional dependencies are unavailable.
 
 ### Risks
@@ -154,6 +163,7 @@ Improve robustness for guitar-forward recordings and add richer output options a
 - Do not support dense multi-guitar separation as an MVP promise.
 - Do not add export formats before the internal schema is stable.
 - Do not prioritize notation polish over editable TAB usefulness.
+- Do not add ad hoc 7-string, bass, or custom tuning branches without a small profile abstraction.
 
 ## Phase 4: Web UI, Correction Workflow, Dataset Collection
 
