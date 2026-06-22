@@ -26,11 +26,13 @@ The MVP target is not perfect publication-quality notation. The MVP target is a 
 
 - Standard tuning only.
 - Six-string guitar only.
+- Phase 0 and Phase 1 are intentionally limited to six-string standard-tuning guitar.
 - Manual fretboard calibration first.
 - Fixed-camera videos first.
 - Solo guitar or guitar-forward recordings first.
 - ASCII TAB and JSON outputs first.
 - MusicXML, GuitarPro, and web UI are later phases.
+- 7-string guitar, bass guitar, and custom tunings are future work; do not implement them unless an issue explicitly requests it.
 - No automatic model training in MVP.
 
 ## Architecture
@@ -54,6 +56,7 @@ The MVP target is not perfect publication-quality notation. The MVP target is a 
 - Prefer small PRs.
 - Keep functions small and typed.
 - Use dataclasses or pydantic-style schemas for internal data structures, but do not add pydantic unless justified.
+- Do not add broad instrument/tuning abstractions before they are requested. When writing new code, avoid unnecessary hard-coding of six strings if a small, local abstraction would keep the code easy to extend later.
 - Each PR must include:
   - Summary
   - Tests run
@@ -73,6 +76,7 @@ The MVP target is not perfect publication-quality notation. The MVP target is a 
 Treat the following as high-priority issues:
 - Wrong pitch-to-string/fret mapping.
 - Hidden assumptions about tuning.
+- Premature support claims for 7-string guitar, bass guitar, or custom tunings.
 - Unclear coordinate systems.
 - Unstable public interfaces.
 - Unnecessary dependency additions.
