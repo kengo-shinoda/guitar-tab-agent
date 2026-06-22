@@ -8,6 +8,9 @@ from pathlib import Path
 from guitar_tab_agent.cli import main
 
 
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+
 class CliTest(unittest.TestCase):
     def test_candidates_json(self) -> None:
         output = io.StringIO()
@@ -101,6 +104,29 @@ class CliTest(unittest.TestCase):
             self.assertEqual(exit_code, 1)
             self.assertIn("error: invalid JSON", errors.getvalue())
             self.assertIn("line 1, column 2", errors.getvalue())
+
+    def test_audio_only_notes_to_tab_smoke_test(self) -> None:
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            exit_code = main(
+                ["notes-to-tab", str(FIXTURES_DIR / "audio_only_notes.json")]
+            )
+
+        tab_lines = output.getvalue().strip().splitlines()
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(len(tab_lines), 6)
+        self.assertEqual(
+            tab_lines,
+            [
+                "e|013",
+                "B|---",
+                "G|---",
+                "D|---",
+                "A|---",
+                "E|---",
+            ],
+        )
 
 
 if __name__ == "__main__":
