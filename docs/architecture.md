@@ -241,10 +241,26 @@ Image coordinates:
 - `y` increases downward.
 - Store the source frame dimensions with calibration data.
 
+Manual fretboard calibration:
+
+- Phase 1 starts with a manually supplied calibration JSON file, not automatic
+  fretboard detection.
+- Required points are `nut_string6`, `nut_string1`, `high_fret_string6`, and
+  `high_fret_string1`.
+- Each point is an image-space `[x, y]` pixel coordinate.
+- The JSON contract stores `video_id`, `frame_time`, `image_width`,
+  `image_height`, and a `points` object containing the four required points.
+
 Fretboard coordinates:
 
 - For the MVP, string numbering follows six-string guitar TAB convention: string 1 is high E, string 6 is low E.
 - Fret numbering starts at 0 for open strings.
+- Normalized fretboard coordinate `u` runs from the nut toward the
+  bridge/high-fret direction.
+- Normalized fretboard coordinate `v` runs from the string 6 side toward the
+  string 1 side.
+- Points inside the calibrated quadrilateral should map approximately into
+  `[0, 1] x [0, 1]`.
 - Standard tuning MIDI pitches are explicit:
   - string 1: E4, MIDI 64
   - string 2: B3, MIDI 59
