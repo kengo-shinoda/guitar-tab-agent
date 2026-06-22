@@ -14,6 +14,10 @@ from guitar_tab_agent.audio.basic_pitch_adapter import (
     BasicPitchUnavailableError,
     transcribe_audio_to_notes,
 )
+from guitar_tab_agent.audio.note_filtering import (
+    filter_note_events,
+    validate_note_filter_thresholds,
+)
 from guitar_tab_agent.fusion.candidates import candidate_positions_for_midi
 from guitar_tab_agent.fusion.simple_decoder import decode_audio_notes
 from guitar_tab_agent.schema import NoteEvent
@@ -57,6 +61,50 @@ def _write_or_print(content: str, output_path: Path | None) -> None:
         print(content)
     else:
         output_path.write_text(content, encoding="utf-8")
+
+
+def _add_audio_filter_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--min-confidence",
+        type=float,
+        default=None,
+        help="drop notes with confidence below this value",
+    )
+    parser.add_argument(
+        "--min-duration",
+        type=float,
+        default=None,
+        help="drop notes shorter than this duration in seconds",
+    )
+    parser.add_argument(
+        "--min-pitch",
+        type=int,
+        default=None,
+        help="drop notes below this MIDI pitch",
+    )
+    parser.add_argument(
+        "--max-pitch",
+        type=int,
+        default=None,
+        help="drop notes above this MIDI pitch",
+    )
+
+
+def _filter_transcribed_notes(args: argparse.Namespace) -> list[NoteEvent]:
+    validate_note_filter_thresholds(
+        min_confidence=args.min_confidence,
+        min_duration=args.min_duration,
+        min_pitch=args.min_pitch,
+        max_pitch=args.max_pitch,
+    )
+    notes = transcribe_audio_to_notes(args.audio_path)
+    return filter_note_events(
+        notes,
+        min_confidence=args.min_confidence,
+        min_duration=args.min_duration,
+        min_pitch=args.min_pitch,
+        max_pitch=args.max_pitch,
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -105,6 +153,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="write NoteEvent JSON to this file instead of stdout",
     )
+    _add_audio_filter_arguments(audio_to_notes)
 
     audio_to_tab = subparsers.add_parser(
         "audio-to-tab",
@@ -116,6 +165,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="write ASCII TAB to this file instead of stdout",
     )
+    _add_audio_filter_arguments(audio_to_tab)
 
     return parser
 
@@ -151,7 +201,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "audio-to-notes":
         try:
-            notes = transcribe_audio_to_notes(args.audio_path)
+            notes = _filter_transcribed_notes(args)
             _write_or_print(_notes_to_json(notes), args.out)
         except BasicPitchUnavailableError as exc:
             print(f"error: {exc}", file=sys.stderr)
@@ -166,7 +216,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "audio-to-tab":
         try:
-            notes = transcribe_audio_to_notes(args.audio_path)
+            notes = _filter_transcribed_notes(args)
             tab = render_ascii_tab(decode_audio_notes(notes))
             _write_or_print(tab, args.out)
         except BasicPitchUnavailableError as exc:
