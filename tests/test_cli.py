@@ -5,7 +5,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import guitar_tab_agent.cli as cli
+from guitar_tab_agent.audio.basic_pitch_adapter import BasicPitchUnavailableError
 from guitar_tab_agent.cli import main
+from guitar_tab_agent.schema import NoteEvent
 
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -127,6 +130,139 @@ class CliTest(unittest.TestCase):
                 "E|---",
             ],
         )
+
+    def test_audio_to_notes_writes_note_event_json(self) -> None:
+        def fake_transcribe(audio_path: Path) -> list[NoteEvent]:
+            self.assertEqual(audio_path, Path("input.wav"))
+            return [
+                NoteEvent(
+                    start=0.0,
+                    end=0.25,
+                    pitch_midi=64,
+                    confidence=0.9,
+                    source="basic_pitch",
+                )
+            ]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = Path(tmpdir) / "notes.json"
+            original_transcribe = cli.transcribe_audio_to_notes
+            cli.transcribe_audio_to_notes = fake_transcribe
+            try:
+                exit_code = main(["audio-to-notes", "input.wav", "--out", str(out_path)])
+            finally:
+                cli.transcribe_audio_to_notes = original_transcribe
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(
+                json.loads(out_path.read_text(encoding="utf-8")),
+                [
+                    {
+                        "start": 0.0,
+                        "end": 0.25,
+                        "pitch_midi": 64,
+                        "confidence": 0.9,
+                        "source": "basic_pitch",
+                    }
+                ],
+            )
+
+    def test_audio_to_notes_prints_stdout_without_output_file(self) -> None:
+        original_transcribe = cli.transcribe_audio_to_notes
+        cli.transcribe_audio_to_notes = lambda audio_path: [
+            NoteEvent(
+                start=0.0,
+                end=0.25,
+                pitch_midi=64,
+                confidence=0.9,
+                source="basic_pitch",
+            )
+        ]
+        output = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(output):
+                exit_code = main(["audio-to-notes", "input.wav"])
+        finally:
+            cli.transcribe_audio_to_notes = original_transcribe
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(json.loads(output.getvalue()), [
+            {
+                "start": 0.0,
+                "end": 0.25,
+                "pitch_midi": 64,
+                "confidence": 0.9,
+                "source": "basic_pitch",
+            }
+        ])
+
+    def test_audio_to_tab_writes_rendered_ascii_tab(self) -> None:
+        original_transcribe = cli.transcribe_audio_to_notes
+        cli.transcribe_audio_to_notes = lambda audio_path: [
+            NoteEvent(
+                start=0.0,
+                end=0.25,
+                pitch_midi=64,
+                confidence=1.0,
+                source="basic_pitch",
+            ),
+            NoteEvent(
+                start=0.5,
+                end=0.75,
+                pitch_midi=45,
+                confidence=0.9,
+                source="basic_pitch",
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = Path(tmpdir) / "tab.txt"
+            try:
+                exit_code = main(["audio-to-tab", "input.wav", "--out", str(out_path)])
+            finally:
+                cli.transcribe_audio_to_notes = original_transcribe
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(
+                out_path.read_text(encoding="utf-8"),
+                "e|0--\nB|---\nG|---\nD|---\nA|--0\nE|---",
+            )
+
+    def test_audio_to_tab_prints_stdout_without_output_file(self) -> None:
+        original_transcribe = cli.transcribe_audio_to_notes
+        cli.transcribe_audio_to_notes = lambda audio_path: [
+            NoteEvent(
+                start=0.0,
+                end=0.25,
+                pitch_midi=64,
+                confidence=1.0,
+                source="basic_pitch",
+            )
+        ]
+        output = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(output):
+                exit_code = main(["audio-to-tab", "input.wav"])
+        finally:
+            cli.transcribe_audio_to_notes = original_transcribe
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(output.getvalue(), "e|0\nB|-\nG|-\nD|-\nA|-\nE|-\n")
+
+    def test_audio_command_missing_basic_pitch_is_readable_error(self) -> None:
+        def fake_transcribe(audio_path: Path) -> list[NoteEvent]:
+            raise BasicPitchUnavailableError("Basic Pitch is not installed")
+
+        original_transcribe = cli.transcribe_audio_to_notes
+        cli.transcribe_audio_to_notes = fake_transcribe
+        errors = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(errors):
+                exit_code = main(["audio-to-notes", "input.wav"])
+        finally:
+            cli.transcribe_audio_to_notes = original_transcribe
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("error: Basic Pitch is not installed", errors.getvalue())
 
 
 if __name__ == "__main__":

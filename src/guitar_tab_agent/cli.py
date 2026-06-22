@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import Sequence
 
 from guitar_tab_agent import __version__
+from guitar_tab_agent.audio.basic_pitch_adapter import (
+    BasicPitchUnavailableError,
+    transcribe_audio_to_notes,
+)
 from guitar_tab_agent.fusion.candidates import candidate_positions_for_midi
 from guitar_tab_agent.fusion.simple_decoder import decode_audio_notes
 from guitar_tab_agent.schema import NoteEvent
@@ -42,6 +46,17 @@ def _load_note_events(path: Path) -> list[NoteEvent]:
             ) from exc
 
     return notes
+
+
+def _notes_to_json(notes: Sequence[NoteEvent]) -> str:
+    return json.dumps([asdict(note) for note in notes], indent=2)
+
+
+def _write_or_print(content: str, output_path: Path | None) -> None:
+    if output_path is None:
+        print(content)
+    else:
+        output_path.write_text(content, encoding="utf-8")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -80,6 +95,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="write ASCII TAB to this file instead of stdout",
     )
 
+    audio_to_notes = subparsers.add_parser(
+        "audio-to-notes",
+        help="transcribe an audio file to JSON NoteEvent records",
+    )
+    audio_to_notes.add_argument("audio_path", type=Path)
+    audio_to_notes.add_argument(
+        "--out",
+        type=Path,
+        help="write NoteEvent JSON to this file instead of stdout",
+    )
+
+    audio_to_tab = subparsers.add_parser(
+        "audio-to-tab",
+        help="transcribe an audio file and render audio-only ASCII TAB",
+    )
+    audio_to_tab.add_argument("audio_path", type=Path)
+    audio_to_tab.add_argument(
+        "--out",
+        type=Path,
+        help="write ASCII TAB to this file instead of stdout",
+    )
+
     return parser
 
 
@@ -103,10 +140,38 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             notes = _load_note_events(args.notes_json)
             tab = render_ascii_tab(decode_audio_notes(notes))
-            if args.out is None:
-                print(tab)
-            else:
-                args.out.write_text(tab, encoding="utf-8")
+            _write_or_print(tab, args.out)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        except OSError as exc:
+            print(f"error: could not write {args.out}: {exc}", file=sys.stderr)
+            return 1
+        return 0
+
+    if args.command == "audio-to-notes":
+        try:
+            notes = transcribe_audio_to_notes(args.audio_path)
+            _write_or_print(_notes_to_json(notes), args.out)
+        except BasicPitchUnavailableError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        except OSError as exc:
+            print(f"error: could not write {args.out}: {exc}", file=sys.stderr)
+            return 1
+        return 0
+
+    if args.command == "audio-to-tab":
+        try:
+            notes = transcribe_audio_to_notes(args.audio_path)
+            tab = render_ascii_tab(decode_audio_notes(notes))
+            _write_or_print(tab, args.out)
+        except BasicPitchUnavailableError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
