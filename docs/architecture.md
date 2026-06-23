@@ -226,6 +226,42 @@ Responsibilities:
 
 The web UI should call the same core modules as the CLI rather than duplicating pipeline logic.
 
+### Local-First Frontend and API Integration
+
+The core engine should remain UI-independent. CLI commands, future local API
+handlers, a local web UI, desktop packaging, and any optional cloud layer should
+all call the same reusable backend workflows instead of duplicating pipeline
+logic.
+
+Intended layers:
+
+- Core engine: shared schemas, pitch-to-string/fret candidates, decoder, and
+  TAB renderer.
+- Adapters: Basic Pitch, MediaPipe, `ffmpeg` frame extraction, and other
+  optional dependency boundaries.
+- Workflows: reusable orchestration functions such as `audio_to_notes`,
+  `audio_to_tab`, `video_to_landmarks`, and future `multimodal_to_tab`.
+- Interfaces: `tabgen` CLI now; later local API, local web UI, and desktop app;
+  optional cloud/API layers only after local quality and UX are validated.
+
+The CLI should stay a thin wrapper around workflow functions. Future frontend
+or API code should pass user inputs to those workflows and render their outputs,
+not reimplement note filtering, decoding, rendering, adapter calls, or error
+handling in UI-specific layers.
+
+Optional dependencies should stay isolated in adapter modules and be imported
+lazily only when the related feature is requested. This keeps the local CLI and
+future interfaces usable without installing every audio, video, or ML tool.
+
+The near-term product direction is local-first: CLI now, local API/local web UI
+later, desktop app packaging after the workflow is useful, and optional
+cloud/SaaS only after core quality and UX are validated. Mobile/iOS is a future
+capture companion direction, not the first product target.
+
+Do not commit real audio/video files, generated JSON or TAB outputs, generated
+plots, or executed notebook outputs. Keep committed fixtures small,
+deterministic, and human-readable.
+
 ## 6. Coordinate Systems
 
 Time coordinates:
