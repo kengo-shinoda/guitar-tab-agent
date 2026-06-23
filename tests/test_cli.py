@@ -95,6 +95,110 @@ class CliTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertEqual(output.getvalue(), "e|0\nB|-\nG|-\nD|-\nA|-\nE|-\n")
 
+    def test_notes_to_tab_without_left_hand_likelihood_stays_audio_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            notes_path = Path(tmpdir) / "notes.json"
+            notes_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "start": 0.0,
+                            "end": 0.25,
+                            "pitch_midi": 68,
+                            "confidence": 1.0,
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+
+            with contextlib.redirect_stdout(output):
+                exit_code = main(["notes-to-tab", str(notes_path)])
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(output.getvalue(), "e|4\nB|-\nG|-\nD|-\nA|-\nE|-\n")
+
+    def test_notes_to_tab_uses_left_hand_likelihood_for_fretted_candidate(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            notes_path = tmp_path / "notes.json"
+            likelihood_path = tmp_path / "likelihood.json"
+            notes_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "start": 0.0,
+                            "end": 0.25,
+                            "pitch_midi": 68,
+                            "confidence": 1.0,
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            likelihood_path.write_text(
+                json.dumps([{"time": 0.0, "likelihood": {"9": 1.0}}]),
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+
+            with contextlib.redirect_stdout(output):
+                exit_code = main(
+                    [
+                        "notes-to-tab",
+                        str(notes_path),
+                        "--left-hand-likelihood",
+                        str(likelihood_path),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(output.getvalue(), "e|-\nB|9\nG|-\nD|-\nA|-\nE|-\n")
+
+    def test_notes_to_tab_left_hand_weight_can_favor_fretted_over_open(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            notes_path = tmp_path / "notes.json"
+            likelihood_path = tmp_path / "likelihood.json"
+            notes_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "start": 0.0,
+                            "end": 0.25,
+                            "pitch_midi": 64,
+                            "confidence": 1.0,
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            likelihood_path.write_text(
+                json.dumps([{"time": 0.0, "likelihood": {"9": 1.0}}]),
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+
+            with contextlib.redirect_stdout(output):
+                exit_code = main(
+                    [
+                        "notes-to-tab",
+                        str(notes_path),
+                        "--left-hand-likelihood",
+                        str(likelihood_path),
+                        "--left-hand-weight",
+                        "10",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(output.getvalue(), "e|-\nB|-\nG|9\nD|-\nA|-\nE|-\n")
+
     def test_notes_to_tab_invalid_json_is_readable_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             notes_path = Path(tmpdir) / "notes.json"
@@ -352,6 +456,40 @@ class CliTest(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(output.getvalue(), "e|0\nB|-\nG|-\nD|-\nA|-\nE|-\n")
+
+    def test_audio_to_tab_uses_left_hand_likelihood_file(self) -> None:
+        original_transcribe = cli.transcribe_audio_to_notes
+        cli.transcribe_audio_to_notes = lambda audio_path: [
+            NoteEvent(
+                start=0.0,
+                end=0.25,
+                pitch_midi=68,
+                confidence=1.0,
+                source="basic_pitch",
+            )
+        ]
+        output = io.StringIO()
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                likelihood_path = Path(tmpdir) / "likelihood.json"
+                likelihood_path.write_text(
+                    json.dumps([{"time": 0.0, "likelihood": {"9": 1.0}}]),
+                    encoding="utf-8",
+                )
+                with contextlib.redirect_stdout(output):
+                    exit_code = main(
+                        [
+                            "audio-to-tab",
+                            "input.wav",
+                            "--left-hand-likelihood",
+                            str(likelihood_path),
+                        ]
+                    )
+        finally:
+            cli.transcribe_audio_to_notes = original_transcribe
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(output.getvalue(), "e|-\nB|9\nG|-\nD|-\nA|-\nE|-\n")
 
     def test_audio_command_missing_basic_pitch_is_readable_error(self) -> None:
         def fake_transcribe(audio_path: Path) -> list[NoteEvent]:

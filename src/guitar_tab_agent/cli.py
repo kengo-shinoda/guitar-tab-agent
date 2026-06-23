@@ -19,9 +19,15 @@ from guitar_tab_agent.audio.note_filtering import (
     validate_note_filter_thresholds,
 )
 from guitar_tab_agent.fusion.candidates import candidate_positions_for_midi
-from guitar_tab_agent.fusion.simple_decoder import decode_audio_notes
+from guitar_tab_agent.fusion.simple_decoder import (
+    DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
+    LeftHandFretLikelihoodByTime,
+)
 from guitar_tab_agent.schema import NoteEvent
-from guitar_tab_agent.tab.ascii_tab import render_ascii_tab
+from guitar_tab_agent.video.left_hand_likelihood_json import (
+    load_left_hand_fret_likelihood_json,
+)
+from guitar_tab_agent.workflows import render_notes_to_ascii_tab
 
 
 def _load_note_events(path: Path) -> list[NoteEvent]:
@@ -90,6 +96,27 @@ def _add_audio_filter_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_left_hand_likelihood_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--left-hand-likelihood",
+        type=Path,
+        default=None,
+        help=(
+            "optional JSON evidence keyed by note start time; each record maps "
+            "frets 1..max_fret to likelihood scores"
+        ),
+    )
+    parser.add_argument(
+        "--left-hand-weight",
+        type=float,
+        default=DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
+        help=(
+            "decoder evidence weight for --left-hand-likelihood; open strings "
+            "receive neutral left-hand evidence"
+        ),
+    )
+
+
 def _filter_transcribed_notes(args: argparse.Namespace) -> list[NoteEvent]:
     validate_note_filter_thresholds(
         min_confidence=args.min_confidence,
@@ -105,6 +132,14 @@ def _filter_transcribed_notes(args: argparse.Namespace) -> list[NoteEvent]:
         min_pitch=args.min_pitch,
         max_pitch=args.max_pitch,
     )
+
+
+def _load_left_hand_likelihood_arg(
+    args: argparse.Namespace,
+) -> LeftHandFretLikelihoodByTime | None:
+    if args.left_hand_likelihood is None:
+        return None
+    return load_left_hand_fret_likelihood_json(args.left_hand_likelihood)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -142,6 +177,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="write ASCII TAB to this file instead of stdout",
     )
+    _add_left_hand_likelihood_arguments(notes_to_tab)
 
     audio_to_notes = subparsers.add_parser(
         "audio-to-notes",
@@ -166,6 +202,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="write ASCII TAB to this file instead of stdout",
     )
     _add_audio_filter_arguments(audio_to_tab)
+    _add_left_hand_likelihood_arguments(audio_to_tab)
 
     return parser
 
@@ -189,7 +226,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "notes-to-tab":
         try:
             notes = _load_note_events(args.notes_json)
-            tab = render_ascii_tab(decode_audio_notes(notes))
+            tab = render_notes_to_ascii_tab(
+                notes,
+                left_hand_fret_likelihood_by_time=_load_left_hand_likelihood_arg(args),
+                left_hand_weight=args.left_hand_weight,
+            )
             _write_or_print(tab, args.out)
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
@@ -217,7 +258,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "audio-to-tab":
         try:
             notes = _filter_transcribed_notes(args)
-            tab = render_ascii_tab(decode_audio_notes(notes))
+            tab = render_notes_to_ascii_tab(
+                notes,
+                left_hand_fret_likelihood_by_time=_load_left_hand_likelihood_arg(args),
+                left_hand_weight=args.left_hand_weight,
+            )
             _write_or_print(tab, args.out)
         except BasicPitchUnavailableError as exc:
             print(f"error: {exc}", file=sys.stderr)
