@@ -81,6 +81,21 @@ def test_landmark_names_do_not_require_hand_label_prefix() -> None:
     assert max(scores, key=scores.get) == 4
 
 
+def test_explicit_right_hand_fingertip_landmarks_are_ignored() -> None:
+    max_fret = 12
+    scores = estimate_left_hand_fret_likelihood(
+        (
+            ("right:index_finger_tip", _center(4, max_fret=max_fret), 0.5),
+            ("right:middle_finger_tip", _center(5, max_fret=max_fret), 0.5),
+            ("right:ring_finger_tip", _center(6, max_fret=max_fret), 0.5),
+            ("right:pinky_tip", _center(7, max_fret=max_fret), 0.5),
+        ),
+        max_fret=max_fret,
+    )
+
+    assert scores == {}
+
+
 def test_output_is_stable_and_deterministic() -> None:
     landmarks = (
         ("left:index_finger_tip", 0.2, 0.4),

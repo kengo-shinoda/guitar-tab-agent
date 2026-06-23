@@ -11,6 +11,12 @@ input landmarks are already expressed in normalized fretboard coordinates:
 The MVP only uses fingertip landmarks and approximates fretted regions by
 dividing the normalized `u` axis evenly. Fret 0 is an open-string position, so
 left-hand fingertip evidence scores only frets 1 through `max_fret`.
+
+For the current right-handed guitar MVP, explicit `left:` landmarks are treated
+as fretting-hand landmarks and explicit `right:` landmarks are ignored. Future
+tapping support may use right-hand landmarks when they are on the fretboard, but
+that is intentionally out of scope here. Left-handed player support is also out
+of scope for this MVP.
 """
 
 from __future__ import annotations
@@ -47,7 +53,8 @@ def estimate_left_hand_fret_likelihood(
     out-of-fretboard fingertips produce an empty mapping.
 
     Hand labels are optional. Names such as `left:index_finger_tip` and
-    `index_finger_tip` are treated equivalently.
+    `index_finger_tip` are treated equivalently. Explicit `right:` landmarks are
+    ignored by this MVP helper.
     """
 
     if max_fret <= 0:
@@ -81,12 +88,19 @@ def _iter_fingertip_points(
 
     points: list[tuple[float, float]] = []
     for name, u, v in landmarks:
+        if not _is_fretting_hand_landmark(name):
+            continue
         if _base_landmark_name(name) not in FINGERTIP_LANDMARK_NAMES:
             continue
         if not _is_inside_normalized_fretboard(u, v):
             continue
         points.append((u, v))
     return points
+
+
+def _is_fretting_hand_landmark(name: str) -> bool:
+    label, _separator, _base_name = name.partition(":")
+    return _separator == "" or label == "left"
 
 
 def _base_landmark_name(name: str) -> str:
