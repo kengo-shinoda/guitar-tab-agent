@@ -13,12 +13,20 @@ from guitar_tab_agent.video.frame_extractor import (
     FrameInfo,
     extract_frames,
 )
+from guitar_tab_agent.video.hand_tracking import (
+    MEDIAPIPE_HAND_LANDMARK_NAMES,
+    MediaPipeUnavailableError,
+    extract_hand_landmarks,
+)
 
 __all__ = [
     "FrameExtractionError",
     "FrameInfo",
     "ImagePoint",
+    "MEDIAPIPE_HAND_LANDMARK_NAMES",
     "ManualFretboardCalibration",
+    "MediaPipeUnavailableError",
     "NormalizedFretboardPoint",
     "extract_frames",
+    "extract_hand_landmarks",
 ]
