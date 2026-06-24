@@ -696,6 +696,104 @@ class CliTest(unittest.TestCase):
         self.assertEqual(exit_code, 1)
         self.assertIn("error: MediaPipe is not installed", errors.getvalue())
 
+    def test_calibrate_landmarks_help(self) -> None:
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            with self.assertRaises(SystemExit) as exc:
+                main(["calibrate-landmarks", "--help"])
+
+        self.assertEqual(exc.exception.code, 0)
+        self.assertIn("usage: tabgen calibrate-landmarks", output.getvalue())
+
+    def test_calibrate_landmarks_writes_hand_landmark_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            landmarks_path = tmp_path / "image_landmarks.json"
+            calibration_path = tmp_path / "calibration.json"
+            out_path = tmp_path / "fretboard_landmarks.json"
+            landmarks_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "timestamp": 1.23,
+                            "landmarks": [
+                                ["left:index_finger_tip", 190.0, 45.0],
+                                ["wrist", 10.0, 20.0],
+                            ],
+                            "confidence": 0.9,
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            calibration_path.write_text(
+                json.dumps(
+                    {
+                        "nut_string_6": [10.0, 20.0],
+                        "nut_string_1": [10.0, 120.0],
+                        "bridge_string_6": [250.0, 20.0],
+                        "bridge_string_1": [250.0, 120.0],
+                        "timestamp": 0.0,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            exit_code = main(
+                [
+                    "calibrate-landmarks",
+                    str(landmarks_path),
+                    "--calibration",
+                    str(calibration_path),
+                    "--out",
+                    str(out_path),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(
+                load_hand_landmark_frames_json(out_path),
+                [
+                    HandLandmarkFrame(
+                        timestamp=1.23,
+                        landmarks=(
+                            ("left:index_finger_tip", 0.75, 0.25),
+                            ("wrist", 0.0, 0.0),
+                        ),
+                        confidence=0.9,
+                    )
+                ],
+            )
+
+    def test_calibrate_landmarks_invalid_calibration_is_readable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            landmarks_path = tmp_path / "image_landmarks.json"
+            calibration_path = tmp_path / "calibration.json"
+            landmarks_path.write_text(
+                json.dumps([{"timestamp": 0.0, "landmarks": []}]),
+                encoding="utf-8",
+            )
+            calibration_path.write_text("{not json", encoding="utf-8")
+            errors = io.StringIO()
+
+            with contextlib.redirect_stderr(errors):
+                exit_code = main(
+                    [
+                        "calibrate-landmarks",
+                        str(landmarks_path),
+                        "--calibration",
+                        str(calibration_path),
+                    ]
+                )
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn(
+                "error: invalid fretboard calibration JSON",
+                errors.getvalue(),
+            )
+
     def test_audio_command_missing_basic_pitch_is_readable_error(self) -> None:
         def fake_transcribe(audio_path: Path) -> list[NoteEvent]:
             raise BasicPitchUnavailableError("Basic Pitch is not installed")
