@@ -8,7 +8,7 @@ of duplicating decoder and renderer logic.
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from guitar_tab_agent.fusion.simple_decoder import (
     DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
@@ -17,10 +17,15 @@ from guitar_tab_agent.fusion.simple_decoder import (
 )
 from guitar_tab_agent.schema import HandLandmarkFrame, NoteEvent
 from guitar_tab_agent.tab.ascii_tab import render_ascii_tab
+from guitar_tab_agent.video.frame_list_json import FrameImageRecord
+from guitar_tab_agent.video.hand_tracking import extract_hand_landmarks
 from guitar_tab_agent.video.left_hand_likelihood import (
     DEFAULT_MAX_FRET,
     estimate_left_hand_fret_likelihood,
 )
+
+
+LandmarkExtractor = Callable[..., HandLandmarkFrame]
 
 
 def render_notes_to_ascii_tab(
@@ -86,7 +91,50 @@ def hand_landmark_frames_to_left_hand_likelihood_json(
     )
 
 
+def frame_images_to_hand_landmark_frames(
+    frames: Sequence[FrameImageRecord],
+    *,
+    hand_index: int = 0,
+    extractor: LandmarkExtractor = extract_hand_landmarks,
+) -> list[HandLandmarkFrame]:
+    """Extract hand landmarks from ordered frame images.
+
+    The default extractor is the optional MediaPipe adapter. Tests and future
+    workflow layers can inject a fake extractor without requiring MediaPipe or
+    real images.
+    """
+
+    if hand_index < 0:
+        raise ValueError("hand_index must be non-negative")
+
+    return [
+        extractor(frame.path, timestamp=frame.timestamp, hand_index=hand_index)
+        for frame in frames
+    ]
+
+
+def hand_landmark_frames_to_json(frames: Sequence[HandLandmarkFrame]) -> str:
+    """Serialize `HandLandmarkFrame` records as deterministic JSON."""
+
+    return json.dumps(
+        [
+            {
+                "timestamp": frame.timestamp,
+                "landmarks": [
+                    [name, x, y] for name, x, y in frame.landmarks
+                ],
+                "confidence": frame.confidence,
+            }
+            for frame in frames
+        ],
+        indent=2,
+    )
+
+
 __all__ = [
+    "LandmarkExtractor",
+    "frame_images_to_hand_landmark_frames",
+    "hand_landmark_frames_to_json",
     "hand_landmark_frames_to_left_hand_likelihood_json",
     "hand_landmark_frames_to_left_hand_likelihood_records",
     "render_notes_to_ascii_tab",

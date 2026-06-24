@@ -24,13 +24,17 @@ from guitar_tab_agent.fusion.simple_decoder import (
     LeftHandFretLikelihoodByTime,
 )
 from guitar_tab_agent.schema import NoteEvent
+from guitar_tab_agent.video.frame_list_json import load_frame_image_records_json
 from guitar_tab_agent.video.left_hand_likelihood_json import (
     load_left_hand_fret_likelihood_json,
 )
 from guitar_tab_agent.video.hand_landmark_frame_json import (
     load_hand_landmark_frames_json,
 )
+from guitar_tab_agent.video.hand_tracking import MediaPipeUnavailableError
 from guitar_tab_agent.workflows import (
+    frame_images_to_hand_landmark_frames,
+    hand_landmark_frames_to_json,
     hand_landmark_frames_to_left_hand_likelihood_json,
     render_notes_to_ascii_tab,
 )
@@ -227,6 +231,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="write left-hand likelihood JSON to this file instead of stdout",
     )
 
+    frames_to_landmarks = subparsers.add_parser(
+        "frames-to-landmarks",
+        help="extract HandLandmarkFrame JSON from frame images",
+    )
+    frames_to_landmarks.add_argument("frames_json", type=Path)
+    frames_to_landmarks.add_argument(
+        "--hand-index",
+        type=int,
+        default=0,
+        help="detected hand index to export",
+    )
+    frames_to_landmarks.add_argument(
+        "--out",
+        type=Path,
+        help="write HandLandmarkFrame JSON to this file instead of stdout",
+    )
+
     return parser
 
 
@@ -306,6 +327,25 @@ def main(argv: Sequence[str] | None = None) -> int:
                 max_fret=args.max_fret,
             )
             _write_or_print(likelihood_json, args.out)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        except OSError as exc:
+            print(f"error: could not write {args.out}: {exc}", file=sys.stderr)
+            return 1
+        return 0
+
+    if args.command == "frames-to-landmarks":
+        try:
+            frame_records = load_frame_image_records_json(args.frames_json)
+            landmark_frames = frame_images_to_hand_landmark_frames(
+                frame_records,
+                hand_index=args.hand_index,
+            )
+            _write_or_print(hand_landmark_frames_to_json(landmark_frames), args.out)
+        except MediaPipeUnavailableError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1

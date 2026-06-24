@@ -8,7 +8,11 @@ from pathlib import Path
 import guitar_tab_agent.cli as cli
 from guitar_tab_agent.audio.basic_pitch_adapter import BasicPitchUnavailableError
 from guitar_tab_agent.cli import main
-from guitar_tab_agent.schema import NoteEvent
+from guitar_tab_agent.schema import HandLandmarkFrame, NoteEvent
+from guitar_tab_agent.video.hand_landmark_frame_json import (
+    load_hand_landmark_frames_json,
+)
+from guitar_tab_agent.video.hand_tracking import MediaPipeUnavailableError
 
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -35,6 +39,16 @@ class CliTest(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         self.assertIn("usage: tabgen", output.getvalue())
+
+    def test_frames_to_landmarks_help(self) -> None:
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            with self.assertRaises(SystemExit) as exc:
+                main(["frames-to-landmarks", "--help"])
+
+        self.assertEqual(exc.exception.code, 0)
+        self.assertIn("usage: tabgen frames-to-landmarks", output.getvalue())
 
     def test_notes_to_tab_writes_output_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -551,6 +565,136 @@ class CliTest(unittest.TestCase):
 
             self.assertEqual(exit_code, 1)
             self.assertIn("error: max_fret must be positive", errors.getvalue())
+
+    def test_frames_to_landmarks_writes_hand_landmark_json(self) -> None:
+        calls: list[tuple[str, float, int]] = []
+
+        def fake_frames_to_landmarks(frame_records, *, hand_index: int):
+            calls.extend(
+                (str(record.path), record.timestamp, hand_index)
+                for record in frame_records
+            )
+            return [
+                HandLandmarkFrame(
+                    timestamp=record.timestamp,
+                    landmarks=(("left:index_finger_tip", 0.38, 0.52),),
+                    confidence=0.9,
+                )
+                for record in frame_records
+            ]
+
+        original_frames_to_landmarks = cli.frame_images_to_hand_landmark_frames
+        cli.frame_images_to_hand_landmark_frames = fake_frames_to_landmarks
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmp_path = Path(tmpdir)
+                frames_path = tmp_path / "frames.json"
+                out_path = tmp_path / "hand_landmarks.json"
+                frames_path.write_text(
+                    json.dumps(
+                        [
+                            {"path": "frame_0001.png", "timestamp": 1.23},
+                            {"path": "frame_0002.png", "timestamp": 1.27},
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+
+                exit_code = main(
+                    [
+                        "frames-to-landmarks",
+                        str(frames_path),
+                        "--hand-index",
+                        "1",
+                        "--out",
+                        str(out_path),
+                    ]
+                )
+
+                self.assertEqual(exit_code, 0)
+                self.assertEqual(
+                    load_hand_landmark_frames_json(out_path),
+                    [
+                        HandLandmarkFrame(
+                            timestamp=1.23,
+                            landmarks=(("left:index_finger_tip", 0.38, 0.52),),
+                            confidence=0.9,
+                        ),
+                        HandLandmarkFrame(
+                            timestamp=1.27,
+                            landmarks=(("left:index_finger_tip", 0.38, 0.52),),
+                            confidence=0.9,
+                        ),
+                    ],
+                )
+        finally:
+            cli.frame_images_to_hand_landmark_frames = original_frames_to_landmarks
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(
+            calls,
+            [
+                (str(tmp_path / "frame_0001.png"), 1.23, 1),
+                (str(tmp_path / "frame_0002.png"), 1.27, 1),
+            ],
+        )
+
+    def test_frames_to_landmarks_invalid_hand_index_is_readable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            frames_path = Path(tmpdir) / "frames.json"
+            frames_path.write_text(
+                json.dumps([{"path": "frame_0001.png", "timestamp": 1.23}]),
+                encoding="utf-8",
+            )
+            errors = io.StringIO()
+
+            with contextlib.redirect_stderr(errors):
+                exit_code = main(
+                    [
+                        "frames-to-landmarks",
+                        str(frames_path),
+                        "--hand-index",
+                        "-1",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("error: hand_index must be non-negative", errors.getvalue())
+
+    def test_frames_to_landmarks_invalid_json_is_readable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            frames_path = Path(tmpdir) / "frames.json"
+            frames_path.write_text("{not json", encoding="utf-8")
+            errors = io.StringIO()
+
+            with contextlib.redirect_stderr(errors):
+                exit_code = main(["frames-to-landmarks", str(frames_path)])
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("error: invalid frame list JSON", errors.getvalue())
+
+    def test_frames_to_landmarks_missing_mediapipe_is_readable(self) -> None:
+        def fake_frames_to_landmarks(frame_records, *, hand_index: int):
+            raise MediaPipeUnavailableError("MediaPipe is not installed")
+
+        original_frames_to_landmarks = cli.frame_images_to_hand_landmark_frames
+        cli.frame_images_to_hand_landmark_frames = fake_frames_to_landmarks
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                frames_path = Path(tmpdir) / "frames.json"
+                frames_path.write_text(
+                    json.dumps([{"path": "frame_0001.png", "timestamp": 1.23}]),
+                    encoding="utf-8",
+                )
+                errors = io.StringIO()
+
+                with contextlib.redirect_stderr(errors):
+                    exit_code = main(["frames-to-landmarks", str(frames_path)])
+        finally:
+            cli.frame_images_to_hand_landmark_frames = original_frames_to_landmarks
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("error: MediaPipe is not installed", errors.getvalue())
 
     def test_audio_command_missing_basic_pitch_is_readable_error(self) -> None:
         def fake_transcribe(audio_path: Path) -> list[NoteEvent]:
