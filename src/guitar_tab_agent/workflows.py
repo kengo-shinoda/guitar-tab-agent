@@ -15,9 +15,12 @@ from guitar_tab_agent.fusion.simple_decoder import (
     LeftHandFretLikelihoodByTime,
     decode_audio_notes,
 )
-from guitar_tab_agent.schema import HandLandmarkFrame, NoteEvent
+from guitar_tab_agent.schema import FretboardCalibration, HandLandmarkFrame, NoteEvent
 from guitar_tab_agent.tab.ascii_tab import render_ascii_tab
 from guitar_tab_agent.video.frame_list_json import FrameImageRecord
+from guitar_tab_agent.video.fretboard_transform import (
+    transform_hand_landmark_frames_to_fretboard,
+)
 from guitar_tab_agent.video.hand_tracking import extract_hand_landmarks
 from guitar_tab_agent.video.left_hand_likelihood import (
     DEFAULT_MAX_FRET,
@@ -131,8 +134,20 @@ def hand_landmark_frames_to_json(frames: Sequence[HandLandmarkFrame]) -> str:
     )
 
 
+def calibrate_hand_landmark_frames_to_json(
+    frames: Sequence[HandLandmarkFrame],
+    calibration: FretboardCalibration,
+) -> str:
+    """Transform image-space landmarks and serialize calibrated frames."""
+
+    return hand_landmark_frames_to_json(
+        transform_hand_landmark_frames_to_fretboard(list(frames), calibration)
+    )
+
+
 __all__ = [
     "LandmarkExtractor",
+    "calibrate_hand_landmark_frames_to_json",
     "frame_images_to_hand_landmark_frames",
     "hand_landmark_frames_to_json",
     "hand_landmark_frames_to_left_hand_likelihood_json",

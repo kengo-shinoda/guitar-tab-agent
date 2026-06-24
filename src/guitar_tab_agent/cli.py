@@ -25,6 +25,7 @@ from guitar_tab_agent.fusion.simple_decoder import (
 )
 from guitar_tab_agent.schema import NoteEvent
 from guitar_tab_agent.video.frame_list_json import load_frame_image_records_json
+from guitar_tab_agent.video.fretboard_transform import load_fretboard_calibration_json
 from guitar_tab_agent.video.left_hand_likelihood_json import (
     load_left_hand_fret_likelihood_json,
 )
@@ -33,6 +34,7 @@ from guitar_tab_agent.video.hand_landmark_frame_json import (
 )
 from guitar_tab_agent.video.hand_tracking import MediaPipeUnavailableError
 from guitar_tab_agent.workflows import (
+    calibrate_hand_landmark_frames_to_json,
     frame_images_to_hand_landmark_frames,
     hand_landmark_frames_to_json,
     hand_landmark_frames_to_left_hand_likelihood_json,
@@ -248,6 +250,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="write HandLandmarkFrame JSON to this file instead of stdout",
     )
 
+    calibrate_landmarks = subparsers.add_parser(
+        "calibrate-landmarks",
+        help="transform image-space HandLandmarkFrame JSON to fretboard coordinates",
+    )
+    calibrate_landmarks.add_argument("landmarks_json", type=Path)
+    calibrate_landmarks.add_argument(
+        "--calibration",
+        type=Path,
+        required=True,
+        help="manual fretboard calibration JSON",
+    )
+    calibrate_landmarks.add_argument(
+        "--out",
+        type=Path,
+        help="write calibrated HandLandmarkFrame JSON to this file instead of stdout",
+    )
+
     return parser
 
 
@@ -346,6 +365,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         except MediaPipeUnavailableError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        except OSError as exc:
+            print(f"error: could not write {args.out}: {exc}", file=sys.stderr)
+            return 1
+        return 0
+
+    if args.command == "calibrate-landmarks":
+        try:
+            frames = load_hand_landmark_frames_json(args.landmarks_json)
+            calibration = load_fretboard_calibration_json(args.calibration)
+            _write_or_print(
+                calibrate_hand_landmark_frames_to_json(frames, calibration),
+                args.out,
+            )
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
