@@ -245,6 +245,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="detected hand index to export",
     )
     frames_to_landmarks.add_argument(
+        "--mediapipe-model",
+        type=Path,
+        default=None,
+        help="MediaPipe Tasks hand landmarker .task model path",
+    )
+    frames_to_landmarks.add_argument(
         "--out",
         type=Path,
         help="write HandLandmarkFrame JSON to this file instead of stdout",
@@ -360,6 +366,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             landmark_frames = frame_images_to_hand_landmark_frames(
                 frame_records,
                 hand_index=args.hand_index,
+                mediapipe_model=args.mediapipe_model,
             )
             _write_or_print(hand_landmark_frames_to_json(landmark_frames), args.out)
         except MediaPipeUnavailableError as exc:
