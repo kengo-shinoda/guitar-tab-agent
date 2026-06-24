@@ -3,7 +3,13 @@ import json
 import pytest
 
 from guitar_tab_agent.schema import HandLandmarkFrame
+from guitar_tab_agent.video.frame_list_json import FrameImageRecord
+from guitar_tab_agent.video.hand_landmark_frame_json import (
+    load_hand_landmark_frames_json,
+)
 from guitar_tab_agent.workflows import (
+    frame_images_to_hand_landmark_frames,
+    hand_landmark_frames_to_json,
     hand_landmark_frames_to_left_hand_likelihood_json,
     hand_landmark_frames_to_left_hand_likelihood_records,
 )
@@ -90,3 +96,51 @@ def test_hand_landmark_conversion_json_is_deterministic() -> None:
 def test_hand_landmark_conversion_rejects_invalid_max_fret() -> None:
     with pytest.raises(ValueError, match="max_fret must be positive"):
         hand_landmark_frames_to_left_hand_likelihood_records([], max_fret=0)
+
+
+def test_frame_images_to_hand_landmark_frames_uses_injected_extractor(tmp_path) -> None:
+    calls: list[tuple[object, float, int]] = []
+    frames = [
+        FrameImageRecord(path=tmp_path / "frame_0001.png", timestamp=1.23),
+        FrameImageRecord(path=tmp_path / "frame_0002.png", timestamp=1.27),
+    ]
+
+    def fake_extractor(frame_path, *, timestamp: float, hand_index: int):
+        calls.append((frame_path, timestamp, hand_index))
+        return HandLandmarkFrame(
+            timestamp=timestamp,
+            landmarks=(("left:index_finger_tip", 0.38, 0.52),),
+            confidence=0.9,
+        )
+
+    landmark_frames = frame_images_to_hand_landmark_frames(
+        frames,
+        hand_index=1,
+        extractor=fake_extractor,
+    )
+
+    assert calls == [
+        (tmp_path / "frame_0001.png", 1.23, 1),
+        (tmp_path / "frame_0002.png", 1.27, 1),
+    ]
+    assert [frame.timestamp for frame in landmark_frames] == [1.23, 1.27]
+
+
+def test_frame_images_to_hand_landmark_frames_rejects_negative_hand_index() -> None:
+    with pytest.raises(ValueError, match="hand_index must be non-negative"):
+        frame_images_to_hand_landmark_frames([], hand_index=-1)
+
+
+def test_hand_landmark_frames_to_json_round_trips_with_loader(tmp_path) -> None:
+    frames = [
+        HandLandmarkFrame(
+            timestamp=1.23,
+            landmarks=(("left:index_finger_tip", 0.38, 0.52),),
+            confidence=0.9,
+        )
+    ]
+    output_path = tmp_path / "hand_landmarks.json"
+
+    output_path.write_text(hand_landmark_frames_to_json(frames), encoding="utf-8")
+
+    assert load_hand_landmark_frames_json(output_path) == frames
