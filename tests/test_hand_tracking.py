@@ -62,6 +62,151 @@ def test_mediapipe_is_loaded_lazily_for_frame_paths(monkeypatch) -> None:
     assert frame.landmarks == (("wrist", 0.10, 0.20),)
 
 
+def test_tasks_api_requires_model_path_when_legacy_api_is_unavailable(
+    monkeypatch,
+) -> None:
+    fake_mediapipe = SimpleNamespace(
+        Image=SimpleNamespace(create_from_file=lambda path: "loaded-frame.png"),
+        solutions=None,
+        tasks=SimpleNamespace(
+            BaseOptions=lambda **kwargs: SimpleNamespace(**kwargs),
+            vision=SimpleNamespace(
+                HandLandmarker=SimpleNamespace(create_from_options=lambda options: None),
+                HandLandmarkerOptions=lambda **kwargs: SimpleNamespace(**kwargs),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        hand_tracking,
+        "import_module",
+        lambda name: fake_mediapipe,
+    )
+
+    with pytest.raises(MediaPipeUnavailableError, match=r"\.task` model path"):
+        extract_hand_landmarks(Path("frame.png"))
+
+
+def test_tasks_api_path_converts_to_hand_landmark_frame(monkeypatch) -> None:
+    calls: list[str] = []
+    options_seen: list[object] = []
+
+    class FakeTaskLandmarker:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return None
+
+        def detect(self, image):
+            assert image == "loaded-frame.png"
+            return SimpleNamespace(
+                hand_landmarks=[
+                    [
+                        SimpleNamespace(x=0.10, y=0.20),
+                        SimpleNamespace(x=0.30, y=0.40),
+                    ]
+                ],
+                handedness=[
+                    [
+                        SimpleNamespace(category_name="Left", score=0.85),
+                    ]
+                ],
+            )
+
+    class FakeHandLandmarker:
+        @staticmethod
+        def create_from_options(options):
+            options_seen.append(options)
+            return FakeTaskLandmarker()
+
+    fake_mediapipe = SimpleNamespace(
+        Image=SimpleNamespace(
+            create_from_file=lambda path: calls.append(path) or "loaded-frame.png"
+        ),
+        solutions=None,
+        tasks=SimpleNamespace(
+            BaseOptions=lambda **kwargs: SimpleNamespace(**kwargs),
+            vision=SimpleNamespace(
+                HandLandmarker=FakeHandLandmarker,
+                HandLandmarkerOptions=lambda **kwargs: SimpleNamespace(**kwargs),
+                RunningMode=SimpleNamespace(IMAGE="IMAGE"),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        hand_tracking,
+        "import_module",
+        lambda name: fake_mediapipe,
+    )
+
+    frame = extract_hand_landmarks(
+        Path("frame.png"),
+        timestamp=1.25,
+        mediapipe_model=Path("hand_landmarker.task"),
+    )
+
+    assert calls == ["frame.png"]
+    assert options_seen[0].base_options.model_asset_path == "hand_landmarker.task"
+    assert options_seen[0].num_hands == 2
+    assert options_seen[0].running_mode == "IMAGE"
+    assert frame == HandLandmarkFrame(
+        timestamp=1.25,
+        landmarks=(
+            ("left:wrist", 0.10, 0.20),
+            ("left:thumb_cmc", 0.30, 0.40),
+        ),
+        confidence=0.85,
+    )
+
+
+def test_model_path_selects_tasks_api_even_when_legacy_api_exists(monkeypatch) -> None:
+    class FakeHands:
+        def __init__(self, **kwargs):
+            raise AssertionError("legacy API should not be used with a model path")
+
+    class FakeTaskLandmarker:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return None
+
+        def detect(self, image):
+            return SimpleNamespace(
+                hand_landmarks=[[SimpleNamespace(x=0.10, y=0.20)]],
+                handedness=[],
+            )
+
+    class FakeHandLandmarker:
+        @staticmethod
+        def create_from_options(options):
+            return FakeTaskLandmarker()
+
+    fake_mediapipe = SimpleNamespace(
+        Image=SimpleNamespace(create_from_file=lambda path: "loaded-frame.png"),
+        solutions=SimpleNamespace(hands=SimpleNamespace(Hands=FakeHands)),
+        tasks=SimpleNamespace(
+            BaseOptions=lambda **kwargs: SimpleNamespace(**kwargs),
+            vision=SimpleNamespace(
+                HandLandmarker=FakeHandLandmarker,
+                HandLandmarkerOptions=lambda **kwargs: SimpleNamespace(**kwargs),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        hand_tracking,
+        "import_module",
+        lambda name: fake_mediapipe,
+    )
+
+    frame = extract_hand_landmarks(
+        Path("frame.png"),
+        mediapipe_model=Path("hand_landmarker.task"),
+    )
+
+    assert frame.landmarks == (("wrist", 0.10, 0.20),)
+
+
 def test_mocked_mediapipe_output_converts_to_hand_landmark_frame(monkeypatch) -> None:
     result = SimpleNamespace(
         multi_hand_landmarks=[

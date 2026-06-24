@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Sequence
+from pathlib import Path
 
 from guitar_tab_agent.fusion.simple_decoder import (
     DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
@@ -98,6 +99,7 @@ def frame_images_to_hand_landmark_frames(
     frames: Sequence[FrameImageRecord],
     *,
     hand_index: int = 0,
+    mediapipe_model: str | Path | None = None,
     extractor: LandmarkExtractor = extract_hand_landmarks,
 ) -> list[HandLandmarkFrame]:
     """Extract hand landmarks from ordered frame images.
@@ -110,10 +112,16 @@ def frame_images_to_hand_landmark_frames(
     if hand_index < 0:
         raise ValueError("hand_index must be non-negative")
 
-    return [
-        extractor(frame.path, timestamp=frame.timestamp, hand_index=hand_index)
-        for frame in frames
-    ]
+    landmark_frames: list[HandLandmarkFrame] = []
+    for frame in frames:
+        kwargs: dict[str, object] = {
+            "timestamp": frame.timestamp,
+            "hand_index": hand_index,
+        }
+        if mediapipe_model is not None:
+            kwargs["mediapipe_model"] = mediapipe_model
+        landmark_frames.append(extractor(frame.path, **kwargs))
+    return landmark_frames
 
 
 def hand_landmark_frames_to_json(frames: Sequence[HandLandmarkFrame]) -> str:

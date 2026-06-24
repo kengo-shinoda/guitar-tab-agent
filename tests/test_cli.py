@@ -49,6 +49,7 @@ class CliTest(unittest.TestCase):
 
         self.assertEqual(exc.exception.code, 0)
         self.assertIn("usage: tabgen frames-to-landmarks", output.getvalue())
+        self.assertIn("--mediapipe-model", output.getvalue())
 
     def test_notes_to_tab_writes_output_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -569,7 +570,13 @@ class CliTest(unittest.TestCase):
     def test_frames_to_landmarks_writes_hand_landmark_json(self) -> None:
         calls: list[tuple[str, float, int]] = []
 
-        def fake_frames_to_landmarks(frame_records, *, hand_index: int):
+        def fake_frames_to_landmarks(
+            frame_records,
+            *,
+            hand_index: int,
+            mediapipe_model=None,
+        ):
+            self.assertIsNone(mediapipe_model)
             calls.extend(
                 (str(record.path), record.timestamp, hand_index)
                 for record in frame_records
@@ -639,6 +646,55 @@ class CliTest(unittest.TestCase):
             ],
         )
 
+    def test_frames_to_landmarks_passes_mediapipe_model_path(self) -> None:
+        calls: list[Path | None] = []
+
+        def fake_frames_to_landmarks(
+            frame_records,
+            *,
+            hand_index: int,
+            mediapipe_model=None,
+        ):
+            self.assertEqual(hand_index, 0)
+            calls.append(mediapipe_model)
+            return [
+                HandLandmarkFrame(
+                    timestamp=record.timestamp,
+                    landmarks=(("left:index_finger_tip", 0.38, 0.52),),
+                    confidence=0.9,
+                )
+                for record in frame_records
+            ]
+
+        original_frames_to_landmarks = cli.frame_images_to_hand_landmark_frames
+        cli.frame_images_to_hand_landmark_frames = fake_frames_to_landmarks
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmp_path = Path(tmpdir)
+                frames_path = tmp_path / "frames.json"
+                out_path = tmp_path / "hand_landmarks.json"
+                model_path = tmp_path / "hand_landmarker.task"
+                frames_path.write_text(
+                    json.dumps([{"path": "frame_0001.png", "timestamp": 1.23}]),
+                    encoding="utf-8",
+                )
+
+                exit_code = main(
+                    [
+                        "frames-to-landmarks",
+                        str(frames_path),
+                        "--mediapipe-model",
+                        str(model_path),
+                        "--out",
+                        str(out_path),
+                    ]
+                )
+        finally:
+            cli.frame_images_to_hand_landmark_frames = original_frames_to_landmarks
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(calls, [model_path])
+
     def test_frames_to_landmarks_invalid_hand_index_is_readable(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             frames_path = Path(tmpdir) / "frames.json"
@@ -674,7 +730,7 @@ class CliTest(unittest.TestCase):
             self.assertIn("error: invalid frame list JSON", errors.getvalue())
 
     def test_frames_to_landmarks_missing_mediapipe_is_readable(self) -> None:
-        def fake_frames_to_landmarks(frame_records, *, hand_index: int):
+        def fake_frames_to_landmarks(frame_records, *, hand_index: int, **kwargs):
             raise MediaPipeUnavailableError("MediaPipe is not installed")
 
         original_frames_to_landmarks = cli.frame_images_to_hand_landmark_frames

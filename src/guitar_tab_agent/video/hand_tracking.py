@@ -55,6 +55,7 @@ def extract_hand_landmarks(
     *,
     timestamp: float = 0.0,
     hand_index: int = 0,
+    mediapipe_model: str | Path | None = None,
 ) -> HandLandmarkFrame:
     """Extract one hand's landmarks from a frame.
 
@@ -71,7 +72,13 @@ def extract_hand_landmarks(
     if hand_index < 0:
         raise ValueError("hand_index must be non-negative")
 
-    result = _detect_hands_with_mediapipe(frame_path_or_image)
+    if mediapipe_model is None:
+        result = _detect_hands_with_mediapipe(frame_path_or_image)
+    else:
+        result = _detect_hands_with_mediapipe(
+            frame_path_or_image,
+            mediapipe_model=mediapipe_model,
+        )
     return _hand_landmark_frame_from_result(
         result,
         timestamp=timestamp,
@@ -79,32 +86,131 @@ def extract_hand_landmarks(
     )
 
 
-def _detect_hands_with_mediapipe(frame_path_or_image: str | Path | Any) -> Any:
+def _detect_hands_with_mediapipe(
+    frame_path_or_image: str | Path | Any,
+    *,
+    mediapipe_model: str | Path | None = None,
+) -> Any:
     mediapipe = _load_mediapipe()
     hands_api = getattr(getattr(mediapipe, "solutions", None), "hands", None)
     hands_factory = getattr(hands_api, "Hands", None)
-    if hands_factory is None:
-        raise MediaPipeUnavailableError(
-            "MediaPipe is installed but `mediapipe.solutions.hands.Hands` "
-            "is unavailable."
+
+    if mediapipe_model is not None:
+        return _detect_hands_with_mediapipe_tasks(
+            mediapipe,
+            frame_path_or_image,
+            model_path=mediapipe_model,
         )
 
-    image = frame_path_or_image
-    if isinstance(frame_path_or_image, str | Path):
-        image_loader = getattr(
-            getattr(mediapipe, "Image", None),
-            "create_from_file",
-            None,
+    if hands_factory is not None:
+        return _detect_hands_with_legacy_mediapipe(
+            mediapipe,
+            hands_factory,
+            frame_path_or_image,
         )
-        if image_loader is None:
-            raise MediaPipeUnavailableError(
-                "MediaPipe is installed, but this adapter cannot load frame paths "
-                "without `mediapipe.Image.create_from_file`."
-            )
-        image = image_loader(str(frame_path_or_image))
+
+    if _tasks_hand_landmarker_available(mediapipe):
+        raise MediaPipeUnavailableError(
+            "MediaPipe Tasks hand landmarker requires a `.task` model path. "
+            "Pass --mediapipe-model /path/to/hand_landmarker.task."
+        )
+
+    raise MediaPipeUnavailableError(
+        "MediaPipe is installed but neither `mediapipe.solutions.hands.Hands` "
+        "nor the MediaPipe Tasks hand landmarker API is available."
+    )
+
+
+def _detect_hands_with_legacy_mediapipe(
+    mediapipe: Any,
+    hands_factory: Any,
+    frame_path_or_image: str | Path | Any,
+) -> Any:
+    image = _load_mediapipe_image(mediapipe, frame_path_or_image)
 
     with hands_factory(static_image_mode=True, max_num_hands=2) as hands:
         return hands.process(image)
+
+
+def _detect_hands_with_mediapipe_tasks(
+    mediapipe: Any,
+    frame_path_or_image: str | Path | Any,
+    *,
+    model_path: str | Path | None,
+) -> Any:
+    if model_path is None:
+        raise MediaPipeUnavailableError(
+            "MediaPipe Tasks hand landmarker requires a `.task` model path. "
+            "Pass --mediapipe-model /path/to/hand_landmarker.task."
+        )
+
+    tasks = getattr(mediapipe, "tasks", None)
+    vision = getattr(tasks, "vision", None)
+    landmarker_factory = getattr(vision, "HandLandmarker", None)
+    options_factory = getattr(vision, "HandLandmarkerOptions", None)
+    base_options_factory = getattr(tasks, "BaseOptions", None)
+
+    if (
+        landmarker_factory is None
+        or options_factory is None
+        or base_options_factory is None
+    ):
+        raise MediaPipeUnavailableError(
+            "MediaPipe is installed but the MediaPipe Tasks hand landmarker API "
+            "is unavailable."
+        )
+
+    create_from_options = getattr(landmarker_factory, "create_from_options", None)
+    if create_from_options is None:
+        raise MediaPipeUnavailableError(
+            "MediaPipe Tasks hand landmarker is unavailable because "
+            "`HandLandmarker.create_from_options` is missing."
+        )
+
+    options_kwargs: dict[str, Any] = {
+        "base_options": base_options_factory(model_asset_path=str(model_path)),
+        "num_hands": 2,
+    }
+    running_mode = getattr(vision, "RunningMode", None)
+    image_mode = getattr(running_mode, "IMAGE", None)
+    if image_mode is not None:
+        options_kwargs["running_mode"] = image_mode
+
+    image = _load_mediapipe_image(mediapipe, frame_path_or_image)
+    options = options_factory(**options_kwargs)
+    with create_from_options(options) as landmarker:
+        return landmarker.detect(image)
+
+
+def _tasks_hand_landmarker_available(mediapipe: Any) -> bool:
+    tasks = getattr(mediapipe, "tasks", None)
+    vision = getattr(tasks, "vision", None)
+    return (
+        getattr(mediapipe, "Image", None) is not None
+        and getattr(vision, "HandLandmarker", None) is not None
+        and getattr(vision, "HandLandmarkerOptions", None) is not None
+        and getattr(tasks, "BaseOptions", None) is not None
+    )
+
+
+def _load_mediapipe_image(
+    mediapipe: Any,
+    frame_path_or_image: str | Path | Any,
+) -> Any:
+    if not isinstance(frame_path_or_image, str | Path):
+        return frame_path_or_image
+
+    image_loader = getattr(
+        getattr(mediapipe, "Image", None),
+        "create_from_file",
+        None,
+    )
+    if image_loader is None:
+        raise MediaPipeUnavailableError(
+            "MediaPipe is installed, but this adapter cannot load frame paths "
+            "without `mediapipe.Image.create_from_file`."
+        )
+    return image_loader(str(frame_path_or_image))
 
 
 def _load_mediapipe() -> Any:
@@ -179,6 +285,8 @@ def _hand_label_and_confidence(
         return None, None
 
     label = getattr(classification, "label", None)
+    if label is None:
+        label = getattr(classification, "category_name", None)
     score = getattr(classification, "score", None)
     return _normalized_label(label), None if score is None else float(score)
 

@@ -126,6 +126,36 @@ def test_frame_images_to_hand_landmark_frames_uses_injected_extractor(tmp_path) 
     assert [frame.timestamp for frame in landmark_frames] == [1.23, 1.27]
 
 
+def test_frame_images_to_hand_landmark_frames_passes_mediapipe_model(tmp_path) -> None:
+    calls: list[tuple[object, float, int, object]] = []
+    frames = [FrameImageRecord(path=tmp_path / "frame_0001.png", timestamp=1.23)]
+    model_path = tmp_path / "hand_landmarker.task"
+
+    def fake_extractor(
+        frame_path,
+        *,
+        timestamp: float,
+        hand_index: int,
+        mediapipe_model,
+    ):
+        calls.append((frame_path, timestamp, hand_index, mediapipe_model))
+        return HandLandmarkFrame(
+            timestamp=timestamp,
+            landmarks=(("left:index_finger_tip", 0.38, 0.52),),
+            confidence=0.9,
+        )
+
+    landmark_frames = frame_images_to_hand_landmark_frames(
+        frames,
+        hand_index=1,
+        mediapipe_model=model_path,
+        extractor=fake_extractor,
+    )
+
+    assert calls == [(tmp_path / "frame_0001.png", 1.23, 1, model_path)]
+    assert landmark_frames[0].timestamp == 1.23
+
+
 def test_frame_images_to_hand_landmark_frames_rejects_negative_hand_index() -> None:
     with pytest.raises(ValueError, match="hand_index must be non-negative"):
         frame_images_to_hand_landmark_frames([], hand_index=-1)
