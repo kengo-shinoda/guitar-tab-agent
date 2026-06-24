@@ -491,6 +491,67 @@ class CliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(output.getvalue(), "e|-\nB|9\nG|-\nD|-\nA|-\nE|-\n")
 
+    def test_landmarks_to_left_hand_likelihood_writes_output_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            landmarks_path = tmp_path / "landmarks.json"
+            out_path = tmp_path / "left_hand_likelihood.json"
+            landmarks_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "timestamp": 1.23,
+                            "landmarks": [["left:index_finger_tip", 0.375, 0.52]],
+                            "confidence": 0.9,
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            exit_code = main(
+                [
+                    "landmarks-to-left-hand-likelihood",
+                    str(landmarks_path),
+                    "--max-fret",
+                    "12",
+                    "--out",
+                    str(out_path),
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            output = json.loads(out_path.read_text(encoding="utf-8"))
+            self.assertEqual(output[0]["time"], 1.23)
+            self.assertEqual(
+                max(output[0]["likelihood"], key=output[0]["likelihood"].get),
+                "5",
+            )
+
+    def test_landmarks_to_left_hand_likelihood_invalid_max_fret_is_readable(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            landmarks_path = Path(tmpdir) / "landmarks.json"
+            landmarks_path.write_text(
+                json.dumps([{"timestamp": 0.0, "landmarks": []}]),
+                encoding="utf-8",
+            )
+            errors = io.StringIO()
+
+            with contextlib.redirect_stderr(errors):
+                exit_code = main(
+                    [
+                        "landmarks-to-left-hand-likelihood",
+                        str(landmarks_path),
+                        "--max-fret",
+                        "0",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("error: max_fret must be positive", errors.getvalue())
+
     def test_audio_command_missing_basic_pitch_is_readable_error(self) -> None:
         def fake_transcribe(audio_path: Path) -> list[NoteEvent]:
             raise BasicPitchUnavailableError("Basic Pitch is not installed")
