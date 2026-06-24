@@ -27,7 +27,13 @@ from guitar_tab_agent.schema import NoteEvent
 from guitar_tab_agent.video.left_hand_likelihood_json import (
     load_left_hand_fret_likelihood_json,
 )
-from guitar_tab_agent.workflows import render_notes_to_ascii_tab
+from guitar_tab_agent.video.hand_landmark_frame_json import (
+    load_hand_landmark_frames_json,
+)
+from guitar_tab_agent.workflows import (
+    hand_landmark_frames_to_left_hand_likelihood_json,
+    render_notes_to_ascii_tab,
+)
 
 
 def _load_note_events(path: Path) -> list[NoteEvent]:
@@ -204,6 +210,23 @@ def build_parser() -> argparse.ArgumentParser:
     _add_audio_filter_arguments(audio_to_tab)
     _add_left_hand_likelihood_arguments(audio_to_tab)
 
+    landmarks_to_likelihood = subparsers.add_parser(
+        "landmarks-to-left-hand-likelihood",
+        help="convert HandLandmarkFrame JSON to left-hand likelihood JSON",
+    )
+    landmarks_to_likelihood.add_argument("landmarks_json", type=Path)
+    landmarks_to_likelihood.add_argument(
+        "--max-fret",
+        type=int,
+        default=24,
+        help="maximum fret region to score",
+    )
+    landmarks_to_likelihood.add_argument(
+        "--out",
+        type=Path,
+        help="write left-hand likelihood JSON to this file instead of stdout",
+    )
+
     return parser
 
 
@@ -267,6 +290,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         except BasicPitchUnavailableError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        except OSError as exc:
+            print(f"error: could not write {args.out}: {exc}", file=sys.stderr)
+            return 1
+        return 0
+
+    if args.command == "landmarks-to-left-hand-likelihood":
+        try:
+            frames = load_hand_landmark_frames_json(args.landmarks_json)
+            likelihood_json = hand_landmark_frames_to_left_hand_likelihood_json(
+                frames,
+                max_fret=args.max_fret,
+            )
+            _write_or_print(likelihood_json, args.out)
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1

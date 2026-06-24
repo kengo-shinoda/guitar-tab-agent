@@ -7,6 +7,7 @@ of duplicating decoder and renderer logic.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 
 from guitar_tab_agent.fusion.simple_decoder import (
@@ -14,8 +15,12 @@ from guitar_tab_agent.fusion.simple_decoder import (
     LeftHandFretLikelihoodByTime,
     decode_audio_notes,
 )
-from guitar_tab_agent.schema import NoteEvent
+from guitar_tab_agent.schema import HandLandmarkFrame, NoteEvent
 from guitar_tab_agent.tab.ascii_tab import render_ascii_tab
+from guitar_tab_agent.video.left_hand_likelihood import (
+    DEFAULT_MAX_FRET,
+    estimate_left_hand_fret_likelihood,
+)
 
 
 def render_notes_to_ascii_tab(
@@ -41,4 +46,48 @@ def render_notes_to_ascii_tab(
     )
 
 
-__all__ = ["render_notes_to_ascii_tab"]
+def hand_landmark_frames_to_left_hand_likelihood_records(
+    frames: Sequence[HandLandmarkFrame],
+    *,
+    max_fret: int = DEFAULT_MAX_FRET,
+) -> list[dict[str, object]]:
+    """Convert hand landmark frames to left-hand likelihood JSON records."""
+
+    if max_fret <= 0:
+        raise ValueError("max_fret must be positive")
+
+    records: list[dict[str, object]] = []
+    for frame in frames:
+        likelihood = estimate_left_hand_fret_likelihood(frame, max_fret=max_fret)
+        records.append(
+            {
+                "time": frame.timestamp,
+                "likelihood": {
+                    str(fret): score for fret, score in sorted(likelihood.items())
+                },
+            }
+        )
+    return records
+
+
+def hand_landmark_frames_to_left_hand_likelihood_json(
+    frames: Sequence[HandLandmarkFrame],
+    *,
+    max_fret: int = DEFAULT_MAX_FRET,
+) -> str:
+    """Serialize frames as left-hand likelihood JSON."""
+
+    return json.dumps(
+        hand_landmark_frames_to_left_hand_likelihood_records(
+            frames,
+            max_fret=max_fret,
+        ),
+        indent=2,
+    )
+
+
+__all__ = [
+    "hand_landmark_frames_to_left_hand_likelihood_json",
+    "hand_landmark_frames_to_left_hand_likelihood_records",
+    "render_notes_to_ascii_tab",
+]
