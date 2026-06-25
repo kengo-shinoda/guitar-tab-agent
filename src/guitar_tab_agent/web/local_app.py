@@ -161,6 +161,7 @@ def render_index_html() -> str:
     </label>
     <button type="submit">Generate</button>
     <button id="copy-tab" type="button">Copy TAB</button>
+    <button id="download-tab" type="button" disabled>Download TAB</button>
   </form>
   <p id="message" class="error"></p>
   <pre id="tab-output" aria-live="polite"></pre>
@@ -169,11 +170,14 @@ def render_index_html() -> str:
     const message = document.getElementById("message");
     const output = document.getElementById("tab-output");
     const copyButton = document.getElementById("copy-tab");
+    const downloadButton = document.getElementById("download-tab");
+    const downloadFilename = "guitar-tab-agent-tab.txt";
 
     form.addEventListener("submit", async (event) => {{
       event.preventDefault();
       message.textContent = "";
       output.textContent = "";
+      downloadButton.disabled = true;
 
       const fileInput = document.getElementById("audio-file");
       const file = fileInput.files[0];
@@ -206,12 +210,28 @@ def render_index_html() -> str:
       }}
       message.textContent = "";
       output.textContent = payload.tab;
+      downloadButton.disabled = !payload.tab;
     }});
 
     copyButton.addEventListener("click", async () => {{
       if (output.textContent) {{
         await navigator.clipboard.writeText(output.textContent);
       }}
+    }});
+
+    downloadButton.addEventListener("click", () => {{
+      if (!output.textContent) {{
+        return;
+      }}
+      const blob = new Blob([output.textContent], {{ type: "text/plain;charset=utf-8" }});
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = downloadFilename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     }});
   </script>
 </body>

@@ -105,8 +105,20 @@ def test_render_index_html_includes_controls_and_limitation() -> None:
     html = render_index_html()
 
     assert 'type="file"' in html
+    assert "Copy TAB" in html
     assert "min_confidence" in html
     assert "min_duration" in html
     assert "min_pitch" in html
     assert "max_pitch" in html
     assert "playable/editable TAB draft" in html
+
+
+def test_render_index_html_includes_download_tab_control() -> None:
+    html = render_index_html()
+
+    assert 'id="download-tab"' in html
+    assert "Download TAB" in html
+    assert "guitar-tab-agent-tab.txt" in html
+    assert "new Blob([output.textContent]" in html
+    assert "URL.createObjectURL(blob)" in html
+    assert "link.download = downloadFilename" in html
