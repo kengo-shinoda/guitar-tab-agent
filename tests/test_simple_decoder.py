@@ -3,6 +3,7 @@ import pytest
 import guitar_tab_agent.fusion.simple_decoder as simple_decoder
 from guitar_tab_agent.fusion.simple_decoder import (
     DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
+    ErgonomicDecoderWeights,
     decode_audio_notes,
     decode_audio_notes_with_debug,
 )
@@ -127,10 +128,83 @@ def test_left_hand_score_components_are_inspectable() -> None:
         for score in debug_events[0].candidate_scores
         if score.candidate.string == 2 and score.candidate.fret == 9
     )
-    assert selected_score.base_cost == 9.0
+    assert selected_score.initial_fret_cost == 9.0
+    assert selected_score.high_fret_cost == pytest.approx(0.45)
+    assert selected_score.base_cost == pytest.approx(9.45)
     assert selected_score.left_hand_likelihood == 1.0
     assert selected_score.left_hand_cost == -DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT
-    assert selected_score.total_cost == 3.0
+    assert selected_score.total_cost == pytest.approx(3.45)
+    assert selected_score.sequence_cost == pytest.approx(3.45)
+
+
+def test_global_path_can_choose_slightly_worse_start_for_better_phrase(
+    monkeypatch,
+) -> None:
+    def fake_candidates(pitch_midi: int) -> tuple[StringFretCandidate, ...]:
+        if pitch_midi == 50:
+            return (
+                StringFretCandidate(string=1, fret=0, pitch_midi=pitch_midi),
+                StringFretCandidate(string=3, fret=7, pitch_midi=pitch_midi),
+            )
+        if pitch_midi == 51:
+            return (
+                StringFretCandidate(string=1, fret=12, pitch_midi=pitch_midi),
+                StringFretCandidate(string=3, fret=8, pitch_midi=pitch_midi),
+            )
+        return (
+            StringFretCandidate(string=1, fret=12, pitch_midi=pitch_midi),
+            StringFretCandidate(string=3, fret=9, pitch_midi=pitch_midi),
+        )
+
+    monkeypatch.setattr(simple_decoder, "candidate_positions_for_midi", fake_candidates)
+
+    decoded = decode_audio_notes(
+        [
+            note(0.0, 50),
+            note(0.5, 51),
+            note(1.0, 52),
+        ]
+    )
+
+    assert positions(decoded) == [
+        (3, 7, 50),
+        (3, 8, 51),
+        (3, 9, 52),
+    ]
+
+
+def test_repeated_note_switch_penalty_is_inspectable(monkeypatch) -> None:
+    calls = 0
+
+    def fake_candidates(pitch_midi: int) -> tuple[StringFretCandidate, ...]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return (StringFretCandidate(string=1, fret=5, pitch_midi=pitch_midi),)
+        return (
+            StringFretCandidate(string=1, fret=5, pitch_midi=pitch_midi),
+            StringFretCandidate(string=2, fret=5, pitch_midi=pitch_midi),
+        )
+
+    monkeypatch.setattr(simple_decoder, "candidate_positions_for_midi", fake_candidates)
+
+    debug_events = decode_audio_notes_with_debug([note(0.0, 60), note(0.5, 60)])
+
+    assert positions([event.selected for event in debug_events]) == [
+        (1, 5, 60),
+        (1, 5, 60),
+    ]
+    switched_score = next(
+        score
+        for score in debug_events[1].candidate_scores
+        if score.candidate.string == 2 and score.candidate.fret == 5
+    )
+    assert switched_score.repeated_note_switch_cost == 2.0
+    assert switched_score.previous_candidate == StringFretCandidate(
+        string=1,
+        fret=5,
+        pitch_midi=60,
+    )
 
 
 def test_left_hand_weight_must_be_non_negative() -> None:
@@ -140,6 +214,11 @@ def test_left_hand_weight_must_be_non_negative() -> None:
             left_hand_fret_likelihood_by_time={0.0: {9: 1.0}},
             left_hand_weight=-1.0,
         )
+
+
+def test_ergonomic_weights_must_be_non_negative() -> None:
+    with pytest.raises(ValueError, match="fret_movement weight must be non-negative"):
+        ErgonomicDecoderWeights(fret_movement=-1.0)
 
 
 def test_tie_breaking_prefers_lower_fret_then_lower_string_number(monkeypatch) -> None:

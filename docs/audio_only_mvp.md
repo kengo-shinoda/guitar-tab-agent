@@ -55,6 +55,11 @@ string/fret ambiguity as an optimization problem, not as a claim that the exact
 observed fingering is known. When multiple positions can play the same note, the
 MVP should prefer a natural, playable fingering path.
 
+The current decoder direction is sequence-level ergonomic path optimization:
+choose the lowest-cost string/fret path across the phrase, not merely the
+locally cheapest position for each note. This remains a TAB draft heuristic, not
+observed fingering reconstruction.
+
 ## Decoder Direction
 
 The next core product improvements should introduce or strengthen ergonomic path
