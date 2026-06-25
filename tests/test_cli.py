@@ -227,6 +227,45 @@ class CliTest(unittest.TestCase):
             self.assertIn("error: invalid JSON", errors.getvalue())
             self.assertIn("line 1, column 2", errors.getvalue())
 
+    def test_notes_to_tab_sorts_loaded_note_events_before_rendering(self) -> None:
+        captured_starts: list[float] = []
+
+        def fake_render_notes_to_ascii_tab(notes, **kwargs):
+            captured_starts.extend(note.start for note in notes)
+            return "tab"
+
+        original_render = cli.render_notes_to_ascii_tab
+        cli.render_notes_to_ascii_tab = fake_render_notes_to_ascii_tab
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                notes_path = Path(tmpdir) / "notes.json"
+                notes_path.write_text(
+                    json.dumps(
+                        [
+                            {
+                                "start": 0.5,
+                                "end": 0.75,
+                                "pitch_midi": 65,
+                                "confidence": 1.0,
+                            },
+                            {
+                                "start": 0.0,
+                                "end": 0.25,
+                                "pitch_midi": 64,
+                                "confidence": 1.0,
+                            },
+                        ]
+                    ),
+                    encoding="utf-8",
+                )
+
+                exit_code = main(["notes-to-tab", str(notes_path)])
+        finally:
+            cli.render_notes_to_ascii_tab = original_render
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(captured_starts, [0.0, 0.5])
+
     def test_audio_only_notes_to_tab_smoke_test(self) -> None:
         output = io.StringIO()
 
@@ -343,6 +382,39 @@ class CliTest(unittest.TestCase):
                         "source": "basic_pitch",
                     }
                 ],
+            )
+
+    def test_audio_to_notes_writes_sorted_note_event_json(self) -> None:
+        original_transcribe = cli.transcribe_audio_to_notes
+        cli.transcribe_audio_to_notes = lambda audio_path: [
+            NoteEvent(
+                start=0.5,
+                end=0.75,
+                pitch_midi=65,
+                confidence=0.9,
+                source="basic_pitch",
+            ),
+            NoteEvent(
+                start=0.0,
+                end=0.25,
+                pitch_midi=64,
+                confidence=0.9,
+                source="basic_pitch",
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = Path(tmpdir) / "notes.json"
+            try:
+                exit_code = main(
+                    ["audio-to-notes", "input.wav", "--out", str(out_path)]
+                )
+            finally:
+                cli.transcribe_audio_to_notes = original_transcribe
+
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(
+                [record["start"] for record in json.loads(out_path.read_text())],
+                [0.0, 0.5],
             )
 
     def test_audio_to_notes_prints_stdout_without_output_file(self) -> None:

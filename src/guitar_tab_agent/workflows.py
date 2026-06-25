@@ -11,6 +11,7 @@ import json
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
+from guitar_tab_agent.audio.note_filtering import sort_note_events_chronologically
 from guitar_tab_agent.fusion.simple_decoder import (
     DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
     LeftHandFretLikelihoodByTime,
@@ -46,9 +47,10 @@ def render_notes_to_ascii_tab(
     transcription.
     """
 
+    sorted_notes = sort_note_events_chronologically(notes)
     return render_ascii_tab(
         decode_audio_notes(
-            notes,
+            sorted_notes,
             left_hand_fret_likelihood_by_time=left_hand_fret_likelihood_by_time,
             left_hand_weight=left_hand_weight,
         )

@@ -16,6 +16,7 @@ from guitar_tab_agent.audio.basic_pitch_adapter import (
 )
 from guitar_tab_agent.audio.note_filtering import (
     filter_note_events,
+    sort_note_events_chronologically,
     validate_note_filter_thresholds,
 )
 from guitar_tab_agent.fusion.candidates import candidate_positions_for_midi
@@ -67,11 +68,14 @@ def _load_note_events(path: Path) -> list[NoteEvent]:
                 f"invalid NoteEvent record at index {index}: {exc}"
             ) from exc
 
-    return notes
+    return sort_note_events_chronologically(notes)
 
 
 def _notes_to_json(notes: Sequence[NoteEvent]) -> str:
-    return json.dumps([asdict(note) for note in notes], indent=2)
+    return json.dumps(
+        [asdict(note) for note in sort_note_events_chronologically(notes)],
+        indent=2,
+    )
 
 
 def _write_or_print(content: str, output_path: Path | None) -> None:
@@ -137,12 +141,14 @@ def _filter_transcribed_notes(args: argparse.Namespace) -> list[NoteEvent]:
         max_pitch=args.max_pitch,
     )
     notes = transcribe_audio_to_notes(args.audio_path)
-    return filter_note_events(
-        notes,
-        min_confidence=args.min_confidence,
-        min_duration=args.min_duration,
-        min_pitch=args.min_pitch,
-        max_pitch=args.max_pitch,
+    return sort_note_events_chronologically(
+        filter_note_events(
+            notes,
+            min_confidence=args.min_confidence,
+            min_duration=args.min_duration,
+            min_pitch=args.min_pitch,
+            max_pitch=args.max_pitch,
+        )
     )
 
 

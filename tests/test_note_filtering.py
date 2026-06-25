@@ -2,6 +2,7 @@ import pytest
 
 from guitar_tab_agent.audio.note_filtering import (
     filter_note_events,
+    sort_note_events_chronologically,
     validate_note_filter_thresholds,
 )
 from guitar_tab_agent.schema import NoteEvent
@@ -29,6 +30,22 @@ def test_defaults_preserve_all_notes_in_order() -> None:
     ]
 
     assert filter_note_events(notes) == notes
+
+
+def test_sort_note_events_chronologically_uses_stable_tie_breaks() -> None:
+    notes = [
+        note(1.0, 1.25, 64),
+        note(0.5, 0.75, 67),
+        note(0.5, 0.70, 69),
+        note(0.5, 0.70, 65),
+    ]
+
+    assert sort_note_events_chronologically(notes) == [
+        notes[3],
+        notes[2],
+        notes[1],
+        notes[0],
+    ]
 
 
 def test_filters_by_min_confidence() -> None:
