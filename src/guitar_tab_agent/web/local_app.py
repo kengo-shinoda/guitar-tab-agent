@@ -231,7 +231,7 @@ def render_index_html() -> str:
       document.body.appendChild(link);
       link.click();
       link.remove();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     }});
   </script>
 </body>
