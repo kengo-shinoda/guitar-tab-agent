@@ -35,6 +35,16 @@ Install project and development dependencies:
 uv sync
 ```
 
+For real audio transcription commands, install the optional Basic Pitch package
+into the same environment:
+
+```bash
+uv pip install basic-pitch
+```
+
+You can skip Basic Pitch when using commands that do not transcribe audio, such
+as `notes-to-tab` and `candidates`.
+
 Inspect the CLI:
 
 ```bash
@@ -50,9 +60,6 @@ uv run tabgen audio-to-tab input.wav \
   --min-pitch 40 \
   --max-pitch 88
 ```
-
-Basic Pitch remains optional and is only needed for real audio transcription
-commands such as `audio-to-notes` and `audio-to-tab`.
 
 ## CLI Examples
 
