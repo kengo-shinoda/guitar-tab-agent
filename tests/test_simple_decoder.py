@@ -5,6 +5,7 @@ from guitar_tab_agent.fusion.simple_decoder import (
     DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
     ErgonomicDecoderWeights,
     decode_audio_notes,
+    decode_audio_notes_top_k,
     decode_audio_notes_with_debug,
 )
 from guitar_tab_agent.schema import DecodedTabEvent, NoteEvent, StringFretCandidate
@@ -355,3 +356,50 @@ def test_unplayable_notes_are_skipped() -> None:
     decoded = decode_audio_notes([note(0.0, 39), note(0.5, 40)])
 
     assert positions(decoded) == [(6, 0, 40)]
+
+
+def test_top_k_returns_multiple_same_pitch_ambiguity_candidates() -> None:
+    notes = [
+        note(0.0, 66),
+        note(0.25, 67),
+        note(0.5, 68),
+        note(0.75, 69),
+    ]
+
+    candidates = decode_audio_notes_top_k(notes, top_k=3)
+
+    assert len(candidates) == 3
+    assert [candidate.rank for candidate in candidates] == [1, 2, 3]
+    assert [candidate.total_score for candidate in candidates] == sorted(
+        candidate.total_score for candidate in candidates
+    )
+    candidate_positions = [positions(list(candidate.events)) for candidate in candidates]
+    assert candidate_positions[0] == positions(decode_audio_notes(notes))
+    assert len({tuple(path) for path in candidate_positions}) == 3
+    assert any(path != candidate_positions[0] for path in candidate_positions[1:])
+
+
+def test_top_k_ordering_is_deterministic() -> None:
+    notes = [
+        note(0.0, 66),
+        note(0.25, 67),
+        note(0.5, 68),
+        note(0.75, 69),
+    ]
+
+    first = decode_audio_notes_top_k(notes, top_k=5)
+    second = decode_audio_notes_top_k(notes, top_k=5)
+
+    assert first == second
+
+
+def test_top_k_does_not_crash_when_fewer_distinct_paths_exist() -> None:
+    candidates = decode_audio_notes_top_k([note(0.0, 40)], top_k=5)
+
+    assert len(candidates) == 1
+    assert positions(list(candidates[0].events)) == [(6, 0, 40)]
+
+
+def test_top_k_rejects_non_positive_request() -> None:
+    with pytest.raises(ValueError, match="top_k must be positive"):
+        decode_audio_notes_top_k([note(0.0, 64)], top_k=0)

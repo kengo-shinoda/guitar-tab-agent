@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from guitar_tab_agent.audio.basic_pitch_adapter import transcribe_audio_to_notes
@@ -21,8 +22,14 @@ from guitar_tab_agent.fusion.simple_decoder import (
     DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
     LeftHandFretLikelihoodByTime,
     decode_audio_notes,
+    decode_audio_notes_top_k,
 )
-from guitar_tab_agent.schema import FretboardCalibration, HandLandmarkFrame, NoteEvent
+from guitar_tab_agent.schema import (
+    DecodedTabEvent,
+    FretboardCalibration,
+    HandLandmarkFrame,
+    NoteEvent,
+)
 from guitar_tab_agent.tab.ascii_tab import render_ascii_tab
 from guitar_tab_agent.video.frame_list_json import FrameImageRecord
 from guitar_tab_agent.video.fretboard_transform import (
@@ -37,6 +44,16 @@ from guitar_tab_agent.video.left_hand_likelihood import (
 
 LandmarkExtractor = Callable[..., HandLandmarkFrame]
 NoteTranscriber = Callable[[Path], Sequence[NoteEvent]]
+
+
+@dataclass(frozen=True)
+class RenderedTabCandidate:
+    """Rendered TAB candidate with ranking metadata."""
+
+    rank: int
+    score: float
+    tab: str
+    events: tuple[DecodedTabEvent, ...]
 
 
 def transcribe_audio_file_to_notes(
@@ -96,6 +113,36 @@ def transcribe_audio_file_to_ascii_tab(
     )
 
 
+def transcribe_audio_file_to_ascii_tab_candidates(
+    audio_path: Path,
+    *,
+    top_k: int,
+    min_confidence: float | None = None,
+    min_duration: float | None = None,
+    min_pitch: int | None = None,
+    max_pitch: int | None = None,
+    left_hand_fret_likelihood_by_time: LeftHandFretLikelihoodByTime | None = None,
+    left_hand_weight: float = DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
+    transcriber: NoteTranscriber = transcribe_audio_to_notes,
+) -> tuple[RenderedTabCandidate, ...]:
+    """Run the audio-to-TAB workflow and render multiple candidate paths."""
+
+    notes = transcribe_audio_file_to_notes(
+        audio_path,
+        min_confidence=min_confidence,
+        min_duration=min_duration,
+        min_pitch=min_pitch,
+        max_pitch=max_pitch,
+        transcriber=transcriber,
+    )
+    return render_notes_to_ascii_tab_candidates(
+        notes,
+        top_k=top_k,
+        left_hand_fret_likelihood_by_time=left_hand_fret_likelihood_by_time,
+        left_hand_weight=left_hand_weight,
+    )
+
+
 def render_notes_to_ascii_tab(
     notes: Sequence[NoteEvent],
     *,
@@ -117,6 +164,44 @@ def render_notes_to_ascii_tab(
             left_hand_fret_likelihood_by_time=left_hand_fret_likelihood_by_time,
             left_hand_weight=left_hand_weight,
         )
+    )
+
+
+def render_notes_to_ascii_tab_candidates(
+    notes: Sequence[NoteEvent],
+    *,
+    top_k: int,
+    left_hand_fret_likelihood_by_time: LeftHandFretLikelihoodByTime | None = None,
+    left_hand_weight: float = DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
+) -> tuple[RenderedTabCandidate, ...]:
+    """Decode and render multiple ranked ASCII TAB candidates."""
+
+    sorted_notes = sort_note_events_chronologically(notes)
+    decoded_candidates = decode_audio_notes_top_k(
+        sorted_notes,
+        top_k=top_k,
+        left_hand_fret_likelihood_by_time=left_hand_fret_likelihood_by_time,
+        left_hand_weight=left_hand_weight,
+    )
+    return tuple(
+        RenderedTabCandidate(
+            rank=candidate.rank,
+            score=candidate.total_score,
+            tab=render_ascii_tab(candidate.events),
+            events=candidate.events,
+        )
+        for candidate in decoded_candidates
+    )
+
+
+def format_rendered_tab_candidates(
+    candidates: Sequence[RenderedTabCandidate],
+) -> str:
+    """Format ranked TAB candidates as labeled plain-text blocks."""
+
+    return "\n\n".join(
+        f"Candidate {candidate.rank} score={candidate.score:.3f}\n{candidate.tab}"
+        for candidate in candidates
     )
 
 
@@ -221,12 +306,16 @@ def calibrate_hand_landmark_frames_to_json(
 __all__ = [
     "LandmarkExtractor",
     "NoteTranscriber",
+    "RenderedTabCandidate",
     "calibrate_hand_landmark_frames_to_json",
+    "format_rendered_tab_candidates",
     "frame_images_to_hand_landmark_frames",
     "hand_landmark_frames_to_json",
     "hand_landmark_frames_to_left_hand_likelihood_json",
     "hand_landmark_frames_to_left_hand_likelihood_records",
     "render_notes_to_ascii_tab",
+    "render_notes_to_ascii_tab_candidates",
+    "transcribe_audio_file_to_ascii_tab_candidates",
     "transcribe_audio_file_to_ascii_tab",
     "transcribe_audio_file_to_notes",
 ]

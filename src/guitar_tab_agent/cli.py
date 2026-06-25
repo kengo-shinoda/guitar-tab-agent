@@ -34,11 +34,14 @@ from guitar_tab_agent.video.hand_landmark_frame_json import (
 from guitar_tab_agent.video.hand_tracking import MediaPipeUnavailableError
 from guitar_tab_agent.workflows import (
     calibrate_hand_landmark_frames_to_json,
+    format_rendered_tab_candidates,
     frame_images_to_hand_landmark_frames,
     hand_landmark_frames_to_json,
     hand_landmark_frames_to_left_hand_likelihood_json,
     render_notes_to_ascii_tab,
+    render_notes_to_ascii_tab_candidates,
     transcribe_audio_file_to_ascii_tab,
+    transcribe_audio_file_to_ascii_tab_candidates,
     transcribe_audio_file_to_notes,
 )
 
@@ -133,6 +136,15 @@ def _add_left_hand_likelihood_arguments(parser: argparse.ArgumentParser) -> None
     )
 
 
+def _add_top_k_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=None,
+        help="render up to N ranked TAB candidate paths instead of one TAB",
+    )
+
+
 def _filter_transcribed_notes(args: argparse.Namespace) -> list[NoteEvent]:
     return transcribe_audio_file_to_notes(
         args.audio_path,
@@ -187,6 +199,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="write ASCII TAB to this file instead of stdout",
     )
+    _add_top_k_argument(notes_to_tab)
     _add_left_hand_likelihood_arguments(notes_to_tab)
 
     audio_to_notes = subparsers.add_parser(
@@ -212,6 +225,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="write ASCII TAB to this file instead of stdout",
     )
     _add_audio_filter_arguments(audio_to_tab)
+    _add_top_k_argument(audio_to_tab)
     _add_left_hand_likelihood_arguments(audio_to_tab)
 
     landmarks_to_likelihood = subparsers.add_parser(
@@ -314,12 +328,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "notes-to-tab":
         try:
             notes = _load_note_events(args.notes_json)
-            tab = render_notes_to_ascii_tab(
-                notes,
-                left_hand_fret_likelihood_by_time=_load_left_hand_likelihood_arg(args),
-                left_hand_weight=args.left_hand_weight,
-            )
-            _write_or_print(tab, args.out)
+            if args.top_k is None:
+                tab = render_notes_to_ascii_tab(
+                    notes,
+                    left_hand_fret_likelihood_by_time=_load_left_hand_likelihood_arg(args),
+                    left_hand_weight=args.left_hand_weight,
+                )
+                _write_or_print(tab, args.out)
+            else:
+                candidates = render_notes_to_ascii_tab_candidates(
+                    notes,
+                    top_k=args.top_k,
+                    left_hand_fret_likelihood_by_time=_load_left_hand_likelihood_arg(args),
+                    left_hand_weight=args.left_hand_weight,
+                )
+                _write_or_print(format_rendered_tab_candidates(candidates), args.out)
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
@@ -345,17 +368,31 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "audio-to-tab":
         try:
-            tab = transcribe_audio_file_to_ascii_tab(
-                args.audio_path,
-                min_confidence=args.min_confidence,
-                min_duration=args.min_duration,
-                min_pitch=args.min_pitch,
-                max_pitch=args.max_pitch,
-                left_hand_fret_likelihood_by_time=_load_left_hand_likelihood_arg(args),
-                left_hand_weight=args.left_hand_weight,
-                transcriber=transcribe_audio_to_notes,
-            )
-            _write_or_print(tab, args.out)
+            if args.top_k is None:
+                tab = transcribe_audio_file_to_ascii_tab(
+                    args.audio_path,
+                    min_confidence=args.min_confidence,
+                    min_duration=args.min_duration,
+                    min_pitch=args.min_pitch,
+                    max_pitch=args.max_pitch,
+                    left_hand_fret_likelihood_by_time=_load_left_hand_likelihood_arg(args),
+                    left_hand_weight=args.left_hand_weight,
+                    transcriber=transcribe_audio_to_notes,
+                )
+                _write_or_print(tab, args.out)
+            else:
+                candidates = transcribe_audio_file_to_ascii_tab_candidates(
+                    args.audio_path,
+                    top_k=args.top_k,
+                    min_confidence=args.min_confidence,
+                    min_duration=args.min_duration,
+                    min_pitch=args.min_pitch,
+                    max_pitch=args.max_pitch,
+                    left_hand_fret_likelihood_by_time=_load_left_hand_likelihood_arg(args),
+                    left_hand_weight=args.left_hand_weight,
+                    transcriber=transcribe_audio_to_notes,
+                )
+                _write_or_print(format_rendered_tab_candidates(candidates), args.out)
         except BasicPitchUnavailableError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1

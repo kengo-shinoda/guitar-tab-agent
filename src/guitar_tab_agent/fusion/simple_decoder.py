@@ -110,6 +110,32 @@ class DecodedNoteDebug:
     candidate_scores: tuple[CandidateScoreBreakdown, ...]
 
 
+@dataclass(frozen=True)
+class DecodedTabCandidate:
+    """One ranked decoded TAB candidate path."""
+
+    events: tuple[DecodedTabEvent, ...]
+    total_score: float
+    rank: int
+
+
+@dataclass(frozen=True)
+class _TopKPathState:
+    scores: tuple[CandidateScoreBreakdown, ...]
+
+    @property
+    def sequence_cost(self) -> float:
+        return self.scores[-1].sequence_cost
+
+    @property
+    def candidate(self) -> StringFretCandidate:
+        return self.scores[-1].candidate
+
+    @property
+    def path_key(self) -> tuple[tuple[int, int], ...]:
+        return tuple((score.candidate.string, score.candidate.fret) for score in self.scores)
+
+
 def _candidate_cost(
     candidate: StringFretCandidate,
     previous: DecodedTabEvent | None,
@@ -297,6 +323,17 @@ def _state_sequence_cost_tuple(state: _PathState) -> tuple[float, int, int]:
     return _sequence_cost_tuple(state.score)
 
 
+def _top_k_state_order(
+    state: _TopKPathState,
+) -> tuple[float, int, int, tuple[tuple[int, int], ...]]:
+    return (
+        state.sequence_cost,
+        state.candidate.fret,
+        state.candidate.string,
+        state.path_key,
+    )
+
+
 def _selected_path_indices(layers: list[list[_PathState]]) -> list[int]:
     if not layers:
         return []
@@ -351,6 +388,42 @@ def _confidence_for_cost(cost: CandidateCost) -> float:
     return max(0.0, min(1.0, 1.0 / (1.0 + confidence_cost)))
 
 
+def _playable_notes_and_candidates(
+    notes: Sequence[NoteEvent],
+) -> list[tuple[NoteEvent, tuple[StringFretCandidate, ...]]]:
+    playable: list[tuple[NoteEvent, tuple[StringFretCandidate, ...]]] = []
+    for note in notes:
+        candidates = candidate_positions_for_midi(note.pitch_midi)
+        if candidates:
+            playable.append((note, candidates))
+    return playable
+
+
+def _dedupe_top_k_states(
+    states: Sequence[_TopKPathState],
+    *,
+    top_k: int,
+) -> list[_TopKPathState]:
+    deduped: list[_TopKPathState] = []
+    seen: set[tuple[tuple[int, int], ...]] = set()
+    for state in sorted(states, key=_top_k_state_order):
+        if state.path_key in seen:
+            continue
+        seen.add(state.path_key)
+        deduped.append(state)
+        if len(deduped) == top_k:
+            break
+    return deduped
+
+
+def _candidate_from_state(
+    state: _TopKPathState | None,
+) -> StringFretCandidate | None:
+    if state is None:
+        return None
+    return state.candidate
+
+
 def decode_audio_notes(
     notes: Sequence[NoteEvent],
     *,
@@ -373,6 +446,89 @@ def decode_audio_notes(
         weights=weights,
     )
     return [debug_event.selected for debug_event in debug_events]
+
+
+def decode_audio_notes_top_k(
+    notes: Sequence[NoteEvent],
+    *,
+    top_k: int,
+    left_hand_fret_likelihood_by_time: LeftHandFretLikelihoodByTime | None = None,
+    left_hand_weight: float = DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
+    weights: ErgonomicDecoderWeights = ErgonomicDecoderWeights(),
+) -> tuple[DecodedTabCandidate, ...]:
+    """Return up to `top_k` distinct deterministic TAB candidate paths.
+
+    This keeps the single-best decoder unchanged. The top-k mode retains the
+    best predecessor paths per candidate, then returns distinct string/fret
+    paths ordered by total sequence cost and deterministic tie-breakers.
+    """
+
+    if top_k <= 0:
+        raise ValueError("top_k must be positive")
+    if left_hand_weight < 0:
+        raise ValueError("left_hand_weight must be non-negative")
+
+    playable = _playable_notes_and_candidates(notes)
+    if not playable:
+        return ()
+
+    previous_states: list[_TopKPathState] = []
+    for note, candidates in playable:
+        left_hand_fret_likelihood = _left_hand_likelihood_for_note(
+            note,
+            left_hand_fret_likelihood_by_time,
+        )
+        states_for_layer: list[_TopKPathState] = []
+        for candidate in candidates:
+            candidate_states: list[_TopKPathState] = []
+            if not previous_states:
+                score = _candidate_score_breakdown(
+                    candidate,
+                    previous_candidate=None,
+                    previous_pitch_midi=None,
+                    previous_sequence_cost=0.0,
+                    left_hand_fret_likelihood=left_hand_fret_likelihood,
+                    left_hand_weight=left_hand_weight,
+                    weights=weights,
+                )
+                candidate_states.append(_TopKPathState(scores=(score,)))
+            else:
+                for previous_state in previous_states:
+                    score = _candidate_score_breakdown(
+                        candidate,
+                        previous_candidate=_candidate_from_state(previous_state),
+                        previous_pitch_midi=previous_state.candidate.pitch_midi,
+                        previous_sequence_cost=previous_state.sequence_cost,
+                        left_hand_fret_likelihood=left_hand_fret_likelihood,
+                        left_hand_weight=left_hand_weight,
+                        weights=weights,
+                    )
+                    candidate_states.append(
+                        _TopKPathState(scores=previous_state.scores + (score,))
+                    )
+
+            states_for_layer.extend(
+                _dedupe_top_k_states(candidate_states, top_k=top_k)
+            )
+
+        previous_states = _dedupe_top_k_states(states_for_layer, top_k=top_k)
+
+    ranked_states = _dedupe_top_k_states(previous_states, top_k=top_k)
+    candidates: list[DecodedTabCandidate] = []
+    playable_notes = [note for note, _ in playable]
+    for rank, state in enumerate(ranked_states, start=1):
+        events = tuple(
+            _decoded_event_from_score(note, score)
+            for note, score in zip(playable_notes, state.scores, strict=True)
+        )
+        candidates.append(
+            DecodedTabCandidate(
+                events=events,
+                total_score=state.sequence_cost,
+                rank=rank,
+            )
+        )
+    return tuple(candidates)
 
 
 def decode_audio_notes_with_debug(
@@ -458,6 +614,7 @@ __all__ = [
     "CandidateScoreBreakdown",
     "DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT",
     "DecodedNoteDebug",
+    "DecodedTabCandidate",
     "ErgonomicDecoderWeights",
     "FRET_MOVEMENT_COST_WEIGHT",
     "HIGH_FRET_COST_WEIGHT",
@@ -470,5 +627,6 @@ __all__ = [
     "REPEATED_NOTE_SWITCH_COST_WEIGHT",
     "STRING_MOVEMENT_COST_WEIGHT",
     "decode_audio_notes",
+    "decode_audio_notes_top_k",
     "decode_audio_notes_with_debug",
 ]
