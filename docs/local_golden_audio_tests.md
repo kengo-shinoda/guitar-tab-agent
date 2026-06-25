@@ -22,7 +22,7 @@ At the current stage, we need clips where the intended phrase, intended fingerin
 - string/fret ambiguity
 - decoder path choice
 - recording-quality problem
-- expected-TAB mismatch
+- expected-fingering mismatch
 
 A small self-recorded golden set should come before broad external benchmark use.
 
@@ -59,6 +59,68 @@ Use a local directory outside the repository, for example:
 
 The exact path is local-only and should not be assumed by tests.
 
+## Intended fingering shorthand
+
+Do not require hand-written ASCII TAB as the first input. For local golden clips, the easiest source-of-truth notation should be a compact string/fret shorthand.
+
+Use this form:
+
+```text
+<string>s-<fret>f
+```
+
+Examples:
+
+```text
+1s-2f
+1s-4f
+2s-5f
+6s-0f
+```
+
+Meaning:
+
+- `1s` means 1st string, the high E string in standard guitar TAB notation.
+- `6s` means 6th string, the low E string.
+- `0f` means open string.
+- `2f` means 2nd fret.
+
+For a monophonic phrase, write comma-separated events in chronological order:
+
+```text
+1s-2f, 1s-4f, 1s-6f, 1s-7f
+```
+
+For notes that are intentionally separated by a pause, insert `rest`:
+
+```text
+1s-2f, 1s-4f, rest, 1s-6f, 1s-7f
+```
+
+For uncertain notes, use `?` only when the take is still useful but the exact intended fingering is unclear:
+
+```text
+1s-2f, 1s-4f, ?, 1s-7f
+```
+
+A clip with too many `?` entries should remain `candidate` or become `rejected`; it should not become `known_good`.
+
+### Optional rhythm hints
+
+Rhythm does not need to be encoded at first. If needed, add a plain-language note such as:
+
+```text
+slow even eighth notes, no intentional rests
+```
+
+or:
+
+```text
+played freely, with a short pause after the fourth note
+```
+
+Do not overfit the metadata format before it is needed.
+
 ## Clip metadata template
 
 For each local clip, write a small metadata file before judging model output.
@@ -79,7 +141,8 @@ Example: `metadata/input2.json`
   "tempo_bpm": null,
   "phrase_type": "unknown",
   "intended_description": "TODO: describe what was played before evaluating output",
-  "intended_tab": "TODO: write intended TAB manually",
+  "intended_fingering_shorthand": "TODO: e.g. 1s-2f, 1s-4f, 1s-6f",
+  "intended_tab": null,
   "expected_properties": {
     "mostly_monophonic": true,
     "no_background_band": true,
@@ -89,12 +152,45 @@ Example: `metadata/input2.json`
   },
   "notes": [
     "Do not commit the audio or generated outputs.",
-    "Use this as a local candidate until the phrase and intended TAB are documented."
+    "Use this as a local candidate until the phrase and intended fingering are documented."
   ]
 }
 ```
 
-The `intended_tab` field should be written by hand. It is the intended fingering, not necessarily the only physically possible TAB.
+The `intended_fingering_shorthand` field is the primary human-authored reference for early local clips. `intended_tab` may be left `null` until a later step converts or rewrites the shorthand into ASCII TAB.
+
+## Example metadata using shorthand
+
+If the clip is a simple high-E-string phrase on frets 2, 4, 6, and 7, write:
+
+```json
+{
+  "clip_id": "input2",
+  "audio_path": "../audio/input2.wav",
+  "status": "documented",
+  "recorded_by": "kengo",
+  "recording_date": "2026-06-25",
+  "instrument": "electric guitar",
+  "tuning": "E standard",
+  "recording_chain": "local user recording",
+  "input_class": "clean monophonic guitar-forward",
+  "tempo_bpm": null,
+  "phrase_type": "one_string_phrase",
+  "intended_description": "Played a clean monophonic phrase on the 1st string using frets 2, 4, 6, and 7.",
+  "intended_fingering_shorthand": "1s-2f, 1s-4f, 1s-6f, 1s-7f",
+  "intended_tab": null,
+  "expected_properties": {
+    "mostly_monophonic": true,
+    "no_background_band": true,
+    "no_chords": true,
+    "no_bends": true,
+    "no_slides": true
+  },
+  "notes": [
+    "Use shorthand as the source of intended fingering."
+  ]
+}
+```
 
 ## Initial candidate: `input2.wav`
 
@@ -104,9 +200,9 @@ Before running or judging the tool output, record:
 
 1. what phrase was played
 2. approximate tempo if known
-3. intended string/fret positions
+3. intended string/fret positions using shorthand
 4. whether there are mistakes, pauses, dead notes, noise, or string squeaks
-5. intended TAB
+5. optional ASCII TAB, only if easy to write
 
 This prevents the evaluation from becoming retrospective or biased by the model output.
 
@@ -117,88 +213,86 @@ Build the local golden set gradually. Start with short clips, roughly 5-15 secon
 ### G0: Current candidate
 
 - `input2.wav`
-- Document what was played.
+- Document what was played using shorthand.
 - Decide later whether it should become a known-good checkpoint.
 
 ### G1: One-string chromatic phrase
 
 Purpose: basic pitch extraction and note ordering.
 
-Example:
+Example shorthand:
 
 ```text
-high E string, frets 5-6-7-8, slow even timing
+1s-5f, 1s-6f, 1s-7f, 1s-8f
 ```
 
 ### G2: Across-string chromatic phrase
 
 Purpose: check string/fret ambiguity across adjacent strings.
 
-Example:
+Example shorthand:
 
 ```text
-E string frets 5-8, then B string frets 5-8
+1s-5f, 1s-6f, 1s-7f, 1s-8f, 2s-5f, 2s-6f, 2s-7f, 2s-8f
 ```
 
 ### G3: One-position major scale
 
 Purpose: check natural single-note phrase behavior within a position box.
 
-Example:
+Example shorthand:
 
 ```text
-C major or G major in one position, no slides or bends
+5s-3f, 5s-5f, 4s-2f, 4s-3f, 4s-5f, 3s-2f, 3s-4f, 3s-5f
 ```
 
 ### G4: Pentatonic lick
 
 Purpose: check a more guitar-like monophonic phrase.
 
-Example:
+Example shorthand:
 
 ```text
-minor pentatonic box phrase, clean picking, no bends
+1s-5f, 1s-8f, 2s-5f, 2s-8f, 3s-5f, 3s-7f
 ```
 
 ### G5: Same-pitch different-string ambiguity
 
 Purpose: stress the decoder's string/fret choice.
 
-Example:
+Example shorthand:
 
 ```text
-play the same pitch in two possible locations across takes, document intended fingering
+1s-5f, 2s-10f
 ```
+
+Both notes are the same pitch in standard tuning. The metadata should preserve the intended fingering so that audio-only ambiguity is visible.
 
 ### G6: Position-shift phrase
 
-Purpose: test ergonomic position continuity and shifts.
+Purpose: test ergonomic position continuity and deliberate shifts.
 
-Example:
+Example shorthand:
 
 ```text
-start in one position, shift deliberately to another position
+1s-5f, 1s-7f, 1s-8f, 1s-10f, 1s-12f
 ```
 
 ### G7: Repeated-note phrase
 
 Purpose: test repeated-note stability and unintended string switching.
 
-Example:
+Example shorthand:
 
 ```text
-repeat one pitch several times on the same string
+2s-5f, 2s-5f, 2s-5f, 2s-5f
 ```
 
 ### G8: Tempo variants
 
 Purpose: test robustness to timing density.
 
-Example:
-
-```text
-record the same phrase slow and medium speed
-```
+Record the same shorthand sequence as slow and medium takes.
 
 ## Running local evaluation
 
@@ -228,7 +322,7 @@ If the local web UI is being checked:
 uv run tabgen web --host 127.0.0.1 --port 8765
 ```
 
-Then upload `input2.wav` through the browser and compare the displayed TAB with the manually written intended TAB.
+Then upload `input2.wav` through the browser and compare the displayed TAB with the intended fingering shorthand.
 
 ## What to inspect
 
@@ -245,7 +339,7 @@ Do not judge only by exact TAB equality. Early evaluation should inspect:
 
 For ambiguous cases, record both:
 
-- intended TAB
+- intended fingering shorthand
 - generated TAB
 
 and mark whether the difference is acceptable, ambiguous, or wrong.
@@ -255,7 +349,7 @@ and mark whether the difference is acceptable, ambiguous, or wrong.
 Use these statuses in local metadata:
 
 - `candidate`: newly recorded, not yet interpreted
-- `documented`: phrase and intended TAB are written down
+- `documented`: phrase and intended fingering shorthand are written down
 - `usable`: output is informative for development, even if imperfect
 - `known_good`: stable enough to reference in a smoke checkpoint
 - `rejected`: bad recording, wrong take, unclear intent, or not useful
