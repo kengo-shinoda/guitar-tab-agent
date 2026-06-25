@@ -7,6 +7,12 @@ from collections.abc import Sequence
 from guitar_tab_agent.schema import NoteEvent
 
 
+def sort_note_events_chronologically(notes: Sequence[NoteEvent]) -> list[NoteEvent]:
+    """Return notes sorted by a deterministic chronological key."""
+
+    return sorted(notes, key=lambda note: (note.start, note.end, note.pitch_midi))
+
+
 def filter_note_events(
     notes: Sequence[NoteEvent],
     *,
@@ -63,5 +69,6 @@ def validate_note_filter_thresholds(
 
 __all__ = [
     "filter_note_events",
+    "sort_note_events_chronologically",
     "validate_note_filter_thresholds",
 ]

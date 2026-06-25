@@ -2,7 +2,8 @@ import json
 
 import pytest
 
-from guitar_tab_agent.schema import HandLandmarkFrame
+import guitar_tab_agent.workflows as workflows
+from guitar_tab_agent.schema import DecodedTabEvent, HandLandmarkFrame, NoteEvent
 from guitar_tab_agent.video.frame_list_json import FrameImageRecord
 from guitar_tab_agent.video.hand_landmark_frame_json import (
     load_hand_landmark_frames_json,
@@ -12,11 +13,91 @@ from guitar_tab_agent.workflows import (
     hand_landmark_frames_to_json,
     hand_landmark_frames_to_left_hand_likelihood_json,
     hand_landmark_frames_to_left_hand_likelihood_records,
+    render_notes_to_ascii_tab,
 )
 
 
 def _center(fret: int, *, max_fret: int) -> float:
     return (fret - 0.5) / max_fret
+
+
+def _note(index: int, pitch_midi: int) -> NoteEvent:
+    start = index * 0.25
+    return NoteEvent(
+        start=start,
+        end=start + 0.2,
+        pitch_midi=pitch_midi,
+        confidence=1.0,
+        source="test",
+    )
+
+
+def test_render_notes_to_ascii_tab_sorts_reverse_order_smoke_phrase() -> None:
+    midi_sequence = [
+        73,
+        74,
+        75,
+        76,
+        68,
+        69,
+        70,
+        71,
+        64,
+        65,
+        66,
+        67,
+        59,
+        60,
+        61,
+        62,
+    ]
+    chronological_notes = [
+        _note(index, pitch_midi) for index, pitch_midi in enumerate(midi_sequence)
+    ]
+    reverse_notes = list(reversed(chronological_notes))
+
+    expected_tab = "\n".join(
+        [
+            "e|9101112---------------------",
+            "B|-------9101112--------------",
+            "G|--------------9101112-------",
+            "D|---------------------9101112",
+            "A|----------------------------",
+            "E|----------------------------",
+        ]
+    )
+
+    assert render_notes_to_ascii_tab(reverse_notes) == expected_tab
+    assert render_notes_to_ascii_tab(chronological_notes) == expected_tab
+
+
+def test_render_notes_to_ascii_tab_sorts_notes_before_decoding(monkeypatch) -> None:
+    captured_starts: list[float] = []
+
+    def fake_decode_audio_notes(notes, **kwargs):
+        captured_starts.extend(note.start for note in notes)
+        return [
+            DecodedTabEvent(
+                start=0.0,
+                end=0.25,
+                string=1,
+                fret=0,
+                pitch_midi=64,
+                confidence=1.0,
+            )
+        ]
+
+    monkeypatch.setattr(workflows, "decode_audio_notes", fake_decode_audio_notes)
+
+    render_notes_to_ascii_tab(
+        [
+            _note(2, 67),
+            _note(0, 64),
+            _note(1, 65),
+        ]
+    )
+
+    assert captured_starts == [0.0, 0.25, 0.5]
 
 
 def test_hand_landmark_frames_convert_to_left_hand_likelihood_records() -> None:
