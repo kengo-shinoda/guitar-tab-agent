@@ -151,6 +151,43 @@ class CliTest(unittest.TestCase):
             self.assertIn("e|", rendered)
             self.assertIn("B|", rendered)
 
+    def test_notes_to_tab_top_k_uses_first_position_hint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            notes_path = Path(tmpdir) / "notes.json"
+            notes_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "start": index * 0.25,
+                            "end": index * 0.25 + 0.2,
+                            "pitch_midi": pitch_midi,
+                            "confidence": 1.0,
+                            "source": "test",
+                        }
+                        for index, pitch_midi in enumerate([66, 67, 68, 69])
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+
+            with contextlib.redirect_stdout(output):
+                exit_code = main(
+                    [
+                        "notes-to-tab",
+                        str(notes_path),
+                        "--top-k",
+                        "2",
+                        "--first-position",
+                        "2s-7f",
+                    ]
+                )
+
+            rendered = output.getvalue()
+            self.assertEqual(exit_code, 0)
+            self.assertIn("Candidate 1 score=", rendered)
+            self.assertIn("B|78910", rendered)
+
     def test_notes_to_tab_top_k_rejects_invalid_count(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             notes_path = Path(tmpdir) / "notes.json"
@@ -174,6 +211,39 @@ class CliTest(unittest.TestCase):
 
             self.assertEqual(exit_code, 1)
             self.assertIn("error: top_k must be positive", errors.getvalue())
+
+    def test_notes_to_tab_first_position_rejects_malformed_hint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            notes_path = Path(tmpdir) / "notes.json"
+            notes_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "start": 0.0,
+                            "end": 0.25,
+                            "pitch_midi": 64,
+                            "confidence": 1.0,
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            errors = io.StringIO()
+
+            with contextlib.redirect_stderr(errors):
+                exit_code = main(
+                    [
+                        "notes-to-tab",
+                        str(notes_path),
+                        "--top-k",
+                        "2",
+                        "--first-position",
+                        "bad",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("error: first_position must use format", errors.getvalue())
 
     def test_notes_to_tab_without_left_hand_likelihood_stays_audio_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -632,6 +702,39 @@ class CliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("Candidate 1 score=", rendered)
         self.assertIn("Candidate 2 score=", rendered)
+
+    def test_audio_to_tab_top_k_uses_first_position_hint(self) -> None:
+        original_transcribe = cli.transcribe_audio_to_notes
+        cli.transcribe_audio_to_notes = lambda audio_path: [
+            NoteEvent(
+                start=index * 0.25,
+                end=index * 0.25 + 0.2,
+                pitch_midi=pitch_midi,
+                confidence=1.0,
+                source="basic_pitch",
+            )
+            for index, pitch_midi in enumerate([66, 67, 68, 69])
+        ]
+        output = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(output):
+                exit_code = main(
+                    [
+                        "audio-to-tab",
+                        "input.wav",
+                        "--top-k",
+                        "2",
+                        "--first-position",
+                        "2s-7f",
+                    ]
+                )
+        finally:
+            cli.transcribe_audio_to_notes = original_transcribe
+
+        rendered = output.getvalue()
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Candidate 1 score=", rendered)
+        self.assertIn("B|78910", rendered)
 
     def test_audio_to_tab_uses_left_hand_likelihood_file(self) -> None:
         original_transcribe = cli.transcribe_audio_to_notes

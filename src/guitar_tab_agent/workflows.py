@@ -20,6 +20,7 @@ from guitar_tab_agent.audio.note_filtering import (
 )
 from guitar_tab_agent.fusion.simple_decoder import (
     DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
+    FingeringPosition,
     LeftHandFretLikelihoodByTime,
     decode_audio_notes,
     decode_audio_notes_top_k,
@@ -94,6 +95,7 @@ def transcribe_audio_file_to_ascii_tab(
     max_pitch: int | None = None,
     left_hand_fret_likelihood_by_time: LeftHandFretLikelihoodByTime | None = None,
     left_hand_weight: float = DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
+    first_position: FingeringPosition | None = None,
     transcriber: NoteTranscriber = transcribe_audio_to_notes,
 ) -> str:
     """Run the current audio-only transcription-to-TAB workflow."""
@@ -110,6 +112,7 @@ def transcribe_audio_file_to_ascii_tab(
         notes,
         left_hand_fret_likelihood_by_time=left_hand_fret_likelihood_by_time,
         left_hand_weight=left_hand_weight,
+        first_position=first_position,
     )
 
 
@@ -123,6 +126,7 @@ def transcribe_audio_file_to_ascii_tab_candidates(
     max_pitch: int | None = None,
     left_hand_fret_likelihood_by_time: LeftHandFretLikelihoodByTime | None = None,
     left_hand_weight: float = DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
+    first_position: FingeringPosition | None = None,
     transcriber: NoteTranscriber = transcribe_audio_to_notes,
 ) -> tuple[RenderedTabCandidate, ...]:
     """Run the audio-to-TAB workflow and render multiple candidate paths."""
@@ -140,6 +144,7 @@ def transcribe_audio_file_to_ascii_tab_candidates(
         top_k=top_k,
         left_hand_fret_likelihood_by_time=left_hand_fret_likelihood_by_time,
         left_hand_weight=left_hand_weight,
+        first_position=first_position,
     )
 
 
@@ -148,6 +153,7 @@ def render_notes_to_ascii_tab(
     *,
     left_hand_fret_likelihood_by_time: LeftHandFretLikelihoodByTime | None = None,
     left_hand_weight: float = DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
+    first_position: FingeringPosition | None = None,
 ) -> str:
     """Decode notes and render ASCII TAB.
 
@@ -163,6 +169,7 @@ def render_notes_to_ascii_tab(
             sorted_notes,
             left_hand_fret_likelihood_by_time=left_hand_fret_likelihood_by_time,
             left_hand_weight=left_hand_weight,
+            first_position=first_position,
         )
     )
 
@@ -173,6 +180,7 @@ def render_notes_to_ascii_tab_candidates(
     top_k: int,
     left_hand_fret_likelihood_by_time: LeftHandFretLikelihoodByTime | None = None,
     left_hand_weight: float = DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
+    first_position: FingeringPosition | None = None,
 ) -> tuple[RenderedTabCandidate, ...]:
     """Decode and render multiple ranked ASCII TAB candidates."""
 
@@ -182,6 +190,7 @@ def render_notes_to_ascii_tab_candidates(
         top_k=top_k,
         left_hand_fret_likelihood_by_time=left_hand_fret_likelihood_by_time,
         left_hand_weight=left_hand_weight,
+        first_position=first_position,
     )
     return tuple(
         RenderedTabCandidate(

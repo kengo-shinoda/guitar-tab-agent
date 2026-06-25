@@ -4,9 +4,11 @@ import guitar_tab_agent.fusion.simple_decoder as simple_decoder
 from guitar_tab_agent.fusion.simple_decoder import (
     DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
     ErgonomicDecoderWeights,
+    FingeringPosition,
     decode_audio_notes,
     decode_audio_notes_top_k,
     decode_audio_notes_with_debug,
+    parse_fingering_position,
 )
 from guitar_tab_agent.schema import DecodedTabEvent, NoteEvent, StringFretCandidate
 
@@ -72,6 +74,56 @@ def test_duplicated_pitch_candidates_are_decoded_by_cost_not_list_order() -> Non
         (2, 3, 62),
         (2, 5, 64),
     ]
+
+
+def test_parse_fingering_position_accepts_compact_hint() -> None:
+    assert parse_fingering_position("5s-0f") == FingeringPosition(string=5, fret=0)
+
+
+def test_parse_fingering_position_rejects_malformed_hint() -> None:
+    with pytest.raises(ValueError, match="first_position must use format"):
+        parse_fingering_position("5-0")
+
+
+def test_first_position_hint_can_select_audio_ambiguous_start() -> None:
+    notes = [
+        note(0.0, 66),
+        note(0.25, 67),
+        note(0.5, 68),
+        note(0.75, 69),
+    ]
+
+    default_candidates = decode_audio_notes_top_k(notes, top_k=2)
+    hinted_candidates = decode_audio_notes_top_k(
+        notes,
+        top_k=2,
+        first_position=FingeringPosition(string=2, fret=7),
+    )
+
+    assert positions(list(default_candidates[0].events))[0] == (1, 2, 66)
+    assert positions(list(hinted_candidates[0].events))[0] == (2, 7, 66)
+
+
+def test_no_first_position_hint_preserves_top_k_behavior() -> None:
+    notes = [
+        note(0.0, 66),
+        note(0.25, 67),
+        note(0.5, 68),
+        note(0.75, 69),
+    ]
+
+    assert decode_audio_notes_top_k(notes, top_k=3, first_position=None) == (
+        decode_audio_notes_top_k(notes, top_k=3)
+    )
+
+
+def test_first_position_hint_rejects_pitch_incompatible_start() -> None:
+    with pytest.raises(ValueError, match="not compatible"):
+        decode_audio_notes_top_k(
+            [note(0.0, 66)],
+            top_k=2,
+            first_position=FingeringPosition(string=5, fret=0),
+        )
 
 
 def test_left_hand_likelihood_can_select_higher_fret_pitch_candidate() -> None:

@@ -3,6 +3,7 @@ import json
 import pytest
 
 import guitar_tab_agent.workflows as workflows
+from guitar_tab_agent.fusion.simple_decoder import FingeringPosition
 from guitar_tab_agent.schema import DecodedTabEvent, HandLandmarkFrame, NoteEvent
 from guitar_tab_agent.video.frame_list_json import FrameImageRecord
 from guitar_tab_agent.video.hand_landmark_frame_json import (
@@ -169,6 +170,25 @@ def test_render_notes_to_ascii_tab_candidates_formats_ranked_blocks() -> None:
     assert formatted.startswith("Candidate 1 score=")
     assert "\n\nCandidate 2 score=" in formatted
     assert "e|" in formatted
+
+
+def test_render_notes_to_ascii_tab_candidates_uses_first_position_hint() -> None:
+    notes = [
+        _note(0, 66),
+        _note(1, 67),
+        _note(2, 68),
+        _note(3, 69),
+    ]
+
+    candidates = render_notes_to_ascii_tab_candidates(
+        notes,
+        top_k=2,
+        first_position=FingeringPosition(string=2, fret=7),
+    )
+
+    assert candidates[0].events[0].string == 2
+    assert candidates[0].events[0].fret == 7
+    assert "B|7" in candidates[0].tab
 
 
 def test_transcribe_audio_file_to_ascii_tab_candidates_uses_injected_transcriber(
