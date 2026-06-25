@@ -11,7 +11,12 @@ import json
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from guitar_tab_agent.audio.note_filtering import sort_note_events_chronologically
+from guitar_tab_agent.audio.basic_pitch_adapter import transcribe_audio_to_notes
+from guitar_tab_agent.audio.note_filtering import (
+    filter_note_events,
+    sort_note_events_chronologically,
+    validate_note_filter_thresholds,
+)
 from guitar_tab_agent.fusion.simple_decoder import (
     DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
     LeftHandFretLikelihoodByTime,
@@ -31,6 +36,64 @@ from guitar_tab_agent.video.left_hand_likelihood import (
 
 
 LandmarkExtractor = Callable[..., HandLandmarkFrame]
+NoteTranscriber = Callable[[Path], Sequence[NoteEvent]]
+
+
+def transcribe_audio_file_to_notes(
+    audio_path: Path,
+    *,
+    min_confidence: float | None = None,
+    min_duration: float | None = None,
+    min_pitch: int | None = None,
+    max_pitch: int | None = None,
+    transcriber: NoteTranscriber = transcribe_audio_to_notes,
+) -> list[NoteEvent]:
+    """Transcribe an audio file, apply optional filters, and sort notes."""
+
+    validate_note_filter_thresholds(
+        min_confidence=min_confidence,
+        min_duration=min_duration,
+        min_pitch=min_pitch,
+        max_pitch=max_pitch,
+    )
+    notes = transcriber(audio_path)
+    return sort_note_events_chronologically(
+        filter_note_events(
+            notes,
+            min_confidence=min_confidence,
+            min_duration=min_duration,
+            min_pitch=min_pitch,
+            max_pitch=max_pitch,
+        )
+    )
+
+
+def transcribe_audio_file_to_ascii_tab(
+    audio_path: Path,
+    *,
+    min_confidence: float | None = None,
+    min_duration: float | None = None,
+    min_pitch: int | None = None,
+    max_pitch: int | None = None,
+    left_hand_fret_likelihood_by_time: LeftHandFretLikelihoodByTime | None = None,
+    left_hand_weight: float = DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
+    transcriber: NoteTranscriber = transcribe_audio_to_notes,
+) -> str:
+    """Run the current audio-only transcription-to-TAB workflow."""
+
+    notes = transcribe_audio_file_to_notes(
+        audio_path,
+        min_confidence=min_confidence,
+        min_duration=min_duration,
+        min_pitch=min_pitch,
+        max_pitch=max_pitch,
+        transcriber=transcriber,
+    )
+    return render_notes_to_ascii_tab(
+        notes,
+        left_hand_fret_likelihood_by_time=left_hand_fret_likelihood_by_time,
+        left_hand_weight=left_hand_weight,
+    )
 
 
 def render_notes_to_ascii_tab(
@@ -157,10 +220,13 @@ def calibrate_hand_landmark_frames_to_json(
 
 __all__ = [
     "LandmarkExtractor",
+    "NoteTranscriber",
     "calibrate_hand_landmark_frames_to_json",
     "frame_images_to_hand_landmark_frames",
     "hand_landmark_frames_to_json",
     "hand_landmark_frames_to_left_hand_likelihood_json",
     "hand_landmark_frames_to_left_hand_likelihood_records",
     "render_notes_to_ascii_tab",
+    "transcribe_audio_file_to_ascii_tab",
+    "transcribe_audio_file_to_notes",
 ]

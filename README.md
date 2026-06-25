@@ -26,6 +26,7 @@ guarantee of the exact string/fret positions used by the player.
 - `tabgen notes-to-tab`: render ASCII TAB from existing `NoteEvent` JSON.
 - `tabgen candidates`: list standard-tuning string/fret candidates for a MIDI
   pitch.
+- `tabgen web`: run a minimal local browser UI for the audio-to-TAB path.
 
 ## Quick Start
 
@@ -59,6 +60,21 @@ uv run tabgen audio-to-tab input.wav \
   --min-confidence 0.55 \
   --min-pitch 40 \
   --max-pitch 88
+```
+
+Run the minimal local web UI:
+
+```bash
+uv run tabgen web
+```
+
+Then open the printed local URL, upload a clean guitar audio file, optionally
+set the same basic filters, and generate an ASCII TAB draft. The web UI uses
+Python's standard library for local serving, so there is no separate web
+dependency. Real audio transcription still requires Basic Pitch:
+
+```bash
+uv pip install basic-pitch
 ```
 
 ## CLI Examples
@@ -95,6 +111,18 @@ List candidate positions for a MIDI pitch:
 uv run tabgen candidates 64
 ```
 
+Run the local web UI:
+
+```bash
+uv run tabgen web --host 127.0.0.1 --port 8765
+```
+
+To open the browser automatically:
+
+```bash
+uv run tabgen web --open-browser
+```
+
 ## Important Limitations
 
 - Audio alone cannot uniquely determine exact guitar string/fret positions.
@@ -105,6 +133,9 @@ uv run tabgen candidates 64
   technique notation are not solved yet.
 - Video-assisted evidence exists as advanced/future work, but it is not the
   public MVP path.
+- The local web UI is intentionally minimal: no authentication, no persistence,
+  no editing UI, no waveform display, no source separation, and no video/hand
+  tracking controls.
 
 ## Deeper Docs
 
