@@ -14,6 +14,7 @@ support, or beam search.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
@@ -34,6 +35,21 @@ DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT = 6.0
 CandidateCost = tuple[float, int, int]
 LeftHandFretLikelihood = Mapping[int, float]
 LeftHandFretLikelihoodByTime = Mapping[float, LeftHandFretLikelihood | None]
+_FINGERING_POSITION_PATTERN = re.compile(r"^(?P<string>[1-6])s-(?P<fret>\d+)f$")
+
+
+@dataclass(frozen=True)
+class FingeringPosition:
+    """A user-provided guitar string/fret position hint."""
+
+    string: int
+    fret: int
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.string <= 6:
+            raise ValueError("string must be between 1 and 6")
+        if self.fret < 0:
+            raise ValueError("fret must be non-negative")
 
 
 @dataclass(frozen=True)
@@ -62,6 +78,20 @@ class ErgonomicDecoderWeights:
         ):
             if value < 0:
                 raise ValueError(f"{name} weight must be non-negative")
+
+
+def parse_fingering_position(value: str) -> FingeringPosition:
+    """Parse compact fingering shorthand such as `5s-0f`."""
+
+    match = _FINGERING_POSITION_PATTERN.fullmatch(value.strip())
+    if match is None:
+        raise ValueError(
+            "first_position must use format '<string>s-<fret>f', such as '5s-0f'"
+        )
+    return FingeringPosition(
+        string=int(match.group("string")),
+        fret=int(match.group("fret")),
+    )
 
 
 @dataclass(frozen=True)
@@ -390,13 +420,41 @@ def _confidence_for_cost(cost: CandidateCost) -> float:
 
 def _playable_notes_and_candidates(
     notes: Sequence[NoteEvent],
+    *,
+    first_position: FingeringPosition | None = None,
 ) -> list[tuple[NoteEvent, tuple[StringFretCandidate, ...]]]:
     playable: list[tuple[NoteEvent, tuple[StringFretCandidate, ...]]] = []
     for note in notes:
         candidates = candidate_positions_for_midi(note.pitch_midi)
         if candidates:
+            if first_position is not None and not playable:
+                candidates = _candidates_matching_first_position(
+                    note,
+                    candidates,
+                    first_position,
+                )
             playable.append((note, candidates))
     return playable
+
+
+def _candidates_matching_first_position(
+    note: NoteEvent,
+    candidates: tuple[StringFretCandidate, ...],
+    first_position: FingeringPosition,
+) -> tuple[StringFretCandidate, ...]:
+    matching = tuple(
+        candidate
+        for candidate in candidates
+        if candidate.string == first_position.string
+        and candidate.fret == first_position.fret
+    )
+    if matching:
+        return matching
+    raise ValueError(
+        "first_position "
+        f"{first_position.string}s-{first_position.fret}f is not compatible "
+        f"with first playable note pitch_midi={note.pitch_midi}"
+    )
 
 
 def _dedupe_top_k_states(
@@ -429,6 +487,7 @@ def decode_audio_notes(
     *,
     left_hand_fret_likelihood_by_time: LeftHandFretLikelihoodByTime | None = None,
     left_hand_weight: float = DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
+    first_position: FingeringPosition | None = None,
     weights: ErgonomicDecoderWeights = ErgonomicDecoderWeights(),
 ) -> list[DecodedTabEvent]:
     """Decode monophonic note events into one TAB position per note.
@@ -443,6 +502,7 @@ def decode_audio_notes(
         notes,
         left_hand_fret_likelihood_by_time=left_hand_fret_likelihood_by_time,
         left_hand_weight=left_hand_weight,
+        first_position=first_position,
         weights=weights,
     )
     return [debug_event.selected for debug_event in debug_events]
@@ -454,6 +514,7 @@ def decode_audio_notes_top_k(
     top_k: int,
     left_hand_fret_likelihood_by_time: LeftHandFretLikelihoodByTime | None = None,
     left_hand_weight: float = DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
+    first_position: FingeringPosition | None = None,
     weights: ErgonomicDecoderWeights = ErgonomicDecoderWeights(),
 ) -> tuple[DecodedTabCandidate, ...]:
     """Return up to `top_k` distinct deterministic TAB candidate paths.
@@ -471,7 +532,7 @@ def decode_audio_notes_top_k(
     if left_hand_weight < 0:
         raise ValueError("left_hand_weight must be non-negative")
 
-    playable = _playable_notes_and_candidates(notes)
+    playable = _playable_notes_and_candidates(notes, first_position=first_position)
     if not playable:
         return ()
 
@@ -539,6 +600,7 @@ def decode_audio_notes_with_debug(
     *,
     left_hand_fret_likelihood_by_time: LeftHandFretLikelihoodByTime | None = None,
     left_hand_weight: float = DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
+    first_position: FingeringPosition | None = None,
     weights: ErgonomicDecoderWeights = ErgonomicDecoderWeights(),
 ) -> tuple[DecodedNoteDebug, ...]:
     """Decode notes and return per-candidate score breakdowns.
@@ -556,10 +618,10 @@ def decode_audio_notes_with_debug(
     candidate_scores_by_note: list[tuple[CandidateScoreBreakdown, ...]] = []
     layers: list[list[_PathState]] = []
 
-    for note in notes:
-        candidates = candidate_positions_for_midi(note.pitch_midi)
-        if not candidates:
-            continue
+    for note, candidates in _playable_notes_and_candidates(
+        notes,
+        first_position=first_position,
+    ):
 
         left_hand_fret_likelihood = _left_hand_likelihood_for_note(
             note,
@@ -620,6 +682,7 @@ __all__ = [
     "DecodedTabCandidate",
     "ErgonomicDecoderWeights",
     "FRET_MOVEMENT_COST_WEIGHT",
+    "FingeringPosition",
     "HIGH_FRET_COST_WEIGHT",
     "INITIAL_FRET_COST_WEIGHT",
     "LeftHandFretLikelihood",
@@ -632,4 +695,5 @@ __all__ = [
     "decode_audio_notes",
     "decode_audio_notes_top_k",
     "decode_audio_notes_with_debug",
+    "parse_fingering_position",
 ]

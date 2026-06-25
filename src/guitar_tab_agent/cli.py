@@ -21,6 +21,7 @@ from guitar_tab_agent.fusion.candidates import candidate_positions_for_midi
 from guitar_tab_agent.fusion.simple_decoder import (
     DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
     LeftHandFretLikelihoodByTime,
+    parse_fingering_position,
 )
 from guitar_tab_agent.schema import NoteEvent
 from guitar_tab_agent.video.frame_list_json import load_frame_image_records_json
@@ -145,6 +146,14 @@ def _add_top_k_argument(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_first_position_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--first-position",
+        default=None,
+        help="constrain the first playable note to a position such as 5s-0f",
+    )
+
+
 def _filter_transcribed_notes(args: argparse.Namespace) -> list[NoteEvent]:
     return transcribe_audio_file_to_notes(
         args.audio_path,
@@ -162,6 +171,12 @@ def _load_left_hand_likelihood_arg(
     if args.left_hand_likelihood is None:
         return None
     return load_left_hand_fret_likelihood_json(args.left_hand_likelihood)
+
+
+def _parse_first_position_arg(args: argparse.Namespace):
+    if args.first_position is None:
+        return None
+    return parse_fingering_position(args.first_position)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -200,6 +215,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="write ASCII TAB to this file instead of stdout",
     )
     _add_top_k_argument(notes_to_tab)
+    _add_first_position_argument(notes_to_tab)
     _add_left_hand_likelihood_arguments(notes_to_tab)
 
     audio_to_notes = subparsers.add_parser(
@@ -226,6 +242,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_audio_filter_arguments(audio_to_tab)
     _add_top_k_argument(audio_to_tab)
+    _add_first_position_argument(audio_to_tab)
     _add_left_hand_likelihood_arguments(audio_to_tab)
 
     landmarks_to_likelihood = subparsers.add_parser(
@@ -333,6 +350,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     notes,
                     left_hand_fret_likelihood_by_time=_load_left_hand_likelihood_arg(args),
                     left_hand_weight=args.left_hand_weight,
+                    first_position=_parse_first_position_arg(args),
                 )
                 _write_or_print(tab, args.out)
             else:
@@ -341,6 +359,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     top_k=args.top_k,
                     left_hand_fret_likelihood_by_time=_load_left_hand_likelihood_arg(args),
                     left_hand_weight=args.left_hand_weight,
+                    first_position=_parse_first_position_arg(args),
                 )
                 _write_or_print(format_rendered_tab_candidates(candidates), args.out)
         except ValueError as exc:
@@ -377,6 +396,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     max_pitch=args.max_pitch,
                     left_hand_fret_likelihood_by_time=_load_left_hand_likelihood_arg(args),
                     left_hand_weight=args.left_hand_weight,
+                    first_position=_parse_first_position_arg(args),
                     transcriber=transcribe_audio_to_notes,
                 )
                 _write_or_print(tab, args.out)
@@ -390,6 +410,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     max_pitch=args.max_pitch,
                     left_hand_fret_likelihood_by_time=_load_left_hand_likelihood_arg(args),
                     left_hand_weight=args.left_hand_weight,
+                    first_position=_parse_first_position_arg(args),
                     transcriber=transcribe_audio_to_notes,
                 )
                 _write_or_print(format_rendered_tab_candidates(candidates), args.out)
