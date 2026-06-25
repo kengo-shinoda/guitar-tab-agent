@@ -60,6 +60,11 @@ choose the lowest-cost string/fret path across the phrase, not merely the
 locally cheapest position for each note. This remains a TAB draft heuristic, not
 observed fingering reconstruction.
 
+The decoder also models simple 4-fret position-box continuity. For example, a
+phrase that can stay in frets 9-12 across adjacent strings should prefer that
+stable hand position when the phrase-level cost supports it. This is still an
+ergonomic TAB-draft heuristic, not proof of the player's observed fingering.
+
 ## Decoder Direction
 
 The next core product improvements should introduce or strengthen ergonomic path
