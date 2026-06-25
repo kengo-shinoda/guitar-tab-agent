@@ -9,12 +9,15 @@ from guitar_tab_agent.video.hand_landmark_frame_json import (
     load_hand_landmark_frames_json,
 )
 from guitar_tab_agent.workflows import (
+    format_rendered_tab_candidates,
     frame_images_to_hand_landmark_frames,
     hand_landmark_frames_to_json,
     hand_landmark_frames_to_left_hand_likelihood_json,
     hand_landmark_frames_to_left_hand_likelihood_records,
     render_notes_to_ascii_tab,
+    render_notes_to_ascii_tab_candidates,
     transcribe_audio_file_to_ascii_tab,
+    transcribe_audio_file_to_ascii_tab_candidates,
     transcribe_audio_file_to_notes,
 )
 
@@ -147,6 +150,50 @@ def test_transcribe_audio_file_to_ascii_tab_reuses_audio_workflow(tmp_path) -> N
     )
 
     assert tab == "e|0-\nB|--\nG|--\nD|--\nA|-0\nE|--"
+
+
+def test_render_notes_to_ascii_tab_candidates_formats_ranked_blocks() -> None:
+    notes = [
+        _note(0, 66),
+        _note(1, 67),
+        _note(2, 68),
+        _note(3, 69),
+    ]
+
+    candidates = render_notes_to_ascii_tab_candidates(notes, top_k=2)
+    formatted = format_rendered_tab_candidates(candidates)
+
+    assert len(candidates) == 2
+    assert candidates[0].rank == 1
+    assert candidates[0].score <= candidates[1].score
+    assert formatted.startswith("Candidate 1 score=")
+    assert "\n\nCandidate 2 score=" in formatted
+    assert "e|" in formatted
+
+
+def test_transcribe_audio_file_to_ascii_tab_candidates_uses_injected_transcriber(
+    tmp_path,
+) -> None:
+    audio_path = tmp_path / "input.wav"
+    audio_path.write_bytes(b"fake audio")
+
+    def fake_transcriber(path):
+        assert path == audio_path
+        return [
+            _note(0, 66),
+            _note(1, 67),
+            _note(2, 68),
+            _note(3, 69),
+        ]
+
+    candidates = transcribe_audio_file_to_ascii_tab_candidates(
+        audio_path,
+        top_k=2,
+        transcriber=fake_transcriber,
+    )
+
+    assert len(candidates) == 2
+    assert candidates[0].tab != candidates[1].tab
 
 
 def test_transcribe_audio_file_rejects_invalid_thresholds(tmp_path) -> None:

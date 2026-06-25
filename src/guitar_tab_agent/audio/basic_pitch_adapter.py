@@ -7,6 +7,8 @@ events into the project's stable `NoteEvent` schema.
 
 from __future__ import annotations
 
+import sys
+from contextlib import redirect_stdout
 from collections.abc import Iterable
 from dataclasses import dataclass
 from importlib import import_module
@@ -61,7 +63,11 @@ def _predict_basic_pitch(audio_path: Path) -> Iterable[Any]:
             "is unavailable."
         )
 
-    result = predict(str(audio_path))
+    # Basic Pitch may print progress/debug messages to stdout. Redirect those
+    # messages to stderr so CLI stdout stays clean for JSON/TAB output while
+    # preserving exceptions and diagnostic visibility.
+    with redirect_stdout(sys.stderr):
+        result = predict(str(audio_path))
     if isinstance(result, tuple) and len(result) >= 3:
         return result[2]
 
