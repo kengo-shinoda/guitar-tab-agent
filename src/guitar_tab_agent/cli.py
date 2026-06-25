@@ -15,9 +15,7 @@ from guitar_tab_agent.audio.basic_pitch_adapter import (
     transcribe_audio_to_notes,
 )
 from guitar_tab_agent.audio.note_filtering import (
-    filter_note_events,
     sort_note_events_chronologically,
-    validate_note_filter_thresholds,
 )
 from guitar_tab_agent.fusion.candidates import candidate_positions_for_midi
 from guitar_tab_agent.fusion.simple_decoder import (
@@ -40,6 +38,8 @@ from guitar_tab_agent.workflows import (
     hand_landmark_frames_to_json,
     hand_landmark_frames_to_left_hand_likelihood_json,
     render_notes_to_ascii_tab,
+    transcribe_audio_file_to_ascii_tab,
+    transcribe_audio_file_to_notes,
 )
 
 
@@ -134,21 +134,13 @@ def _add_left_hand_likelihood_arguments(parser: argparse.ArgumentParser) -> None
 
 
 def _filter_transcribed_notes(args: argparse.Namespace) -> list[NoteEvent]:
-    validate_note_filter_thresholds(
+    return transcribe_audio_file_to_notes(
+        args.audio_path,
         min_confidence=args.min_confidence,
         min_duration=args.min_duration,
         min_pitch=args.min_pitch,
         max_pitch=args.max_pitch,
-    )
-    notes = transcribe_audio_to_notes(args.audio_path)
-    return sort_note_events_chronologically(
-        filter_note_events(
-            notes,
-            min_confidence=args.min_confidence,
-            min_duration=args.min_duration,
-            min_pitch=args.min_pitch,
-            max_pitch=args.max_pitch,
-        )
+        transcriber=transcribe_audio_to_notes,
     )
 
 
@@ -279,6 +271,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="write calibrated HandLandmarkFrame JSON to this file instead of stdout",
     )
 
+    web = subparsers.add_parser(
+        "web",
+        help="run the minimal local audio-to-TAB web UI",
+    )
+    web.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="host interface for the local web UI",
+    )
+    web.add_argument(
+        "--port",
+        type=int,
+        default=8765,
+        help="port for the local web UI",
+    )
+    web.add_argument(
+        "--open-browser",
+        action="store_true",
+        help="open the local web UI in the default browser",
+    )
+
     return parser
 
 
@@ -332,11 +345,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "audio-to-tab":
         try:
-            notes = _filter_transcribed_notes(args)
-            tab = render_notes_to_ascii_tab(
-                notes,
+            tab = transcribe_audio_file_to_ascii_tab(
+                args.audio_path,
+                min_confidence=args.min_confidence,
+                min_duration=args.min_duration,
+                min_pitch=args.min_pitch,
+                max_pitch=args.max_pitch,
                 left_hand_fret_likelihood_by_time=_load_left_hand_likelihood_arg(args),
                 left_hand_weight=args.left_hand_weight,
+                transcriber=transcribe_audio_to_notes,
             )
             _write_or_print(tab, args.out)
         except BasicPitchUnavailableError as exc:
@@ -347,6 +364,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         except OSError as exc:
             print(f"error: could not write {args.out}: {exc}", file=sys.stderr)
+            return 1
+        return 0
+
+    if args.command == "web":
+        from guitar_tab_agent.web.local_app import run_local_web_ui
+
+        try:
+            run_local_web_ui(
+                host=args.host,
+                port=args.port,
+                open_browser=args.open_browser,
+            )
+        except OSError as exc:
+            print(f"error: could not start local web UI: {exc}", file=sys.stderr)
             return 1
         return 0
 

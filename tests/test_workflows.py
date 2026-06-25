@@ -14,6 +14,8 @@ from guitar_tab_agent.workflows import (
     hand_landmark_frames_to_left_hand_likelihood_json,
     hand_landmark_frames_to_left_hand_likelihood_records,
     render_notes_to_ascii_tab,
+    transcribe_audio_file_to_ascii_tab,
+    transcribe_audio_file_to_notes,
 )
 
 
@@ -98,6 +100,63 @@ def test_render_notes_to_ascii_tab_sorts_notes_before_decoding(monkeypatch) -> N
     )
 
     assert captured_starts == [0.0, 0.25, 0.5]
+
+
+def test_transcribe_audio_file_to_notes_filters_and_sorts(tmp_path) -> None:
+    audio_path = tmp_path / "input.wav"
+    audio_path.write_bytes(b"fake audio")
+
+    def fake_transcriber(path):
+        assert path == audio_path
+        return [
+            _note(2, 65),
+            NoteEvent(
+                start=0.0,
+                end=0.25,
+                pitch_midi=64,
+                confidence=0.4,
+                source="test",
+            ),
+            _note(1, 32),
+        ]
+
+    notes = transcribe_audio_file_to_notes(
+        audio_path,
+        min_confidence=0.5,
+        min_pitch=40,
+        transcriber=fake_transcriber,
+    )
+
+    assert [(note.start, note.pitch_midi) for note in notes] == [(0.5, 65)]
+
+
+def test_transcribe_audio_file_to_ascii_tab_reuses_audio_workflow(tmp_path) -> None:
+    audio_path = tmp_path / "input.wav"
+    audio_path.write_bytes(b"fake audio")
+
+    def fake_transcriber(path):
+        assert path == audio_path
+        return [
+            _note(1, 45),
+            _note(0, 64),
+        ]
+
+    tab = transcribe_audio_file_to_ascii_tab(
+        audio_path,
+        transcriber=fake_transcriber,
+    )
+
+    assert tab == "e|0-\nB|--\nG|--\nD|--\nA|-0\nE|--"
+
+
+def test_transcribe_audio_file_rejects_invalid_thresholds(tmp_path) -> None:
+    with pytest.raises(ValueError, match="min_pitch"):
+        transcribe_audio_file_to_notes(
+            tmp_path / "input.wav",
+            min_pitch=90,
+            max_pitch=80,
+            transcriber=lambda path: [],
+        )
 
 
 def test_hand_landmark_frames_convert_to_left_hand_likelihood_records() -> None:

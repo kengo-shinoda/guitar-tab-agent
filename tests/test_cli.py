@@ -51,6 +51,17 @@ class CliTest(unittest.TestCase):
         self.assertIn("usage: tabgen frames-to-landmarks", output.getvalue())
         self.assertIn("--mediapipe-model", output.getvalue())
 
+    def test_web_help(self) -> None:
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output):
+            with self.assertRaises(SystemExit) as exc:
+                main(["web", "--help"])
+
+        self.assertEqual(exc.exception.code, 0)
+        self.assertIn("usage: tabgen web", output.getvalue())
+        self.assertIn("--open-browser", output.getvalue())
+
     def test_notes_to_tab_writes_output_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
