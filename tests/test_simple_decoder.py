@@ -173,6 +173,80 @@ def test_global_path_can_choose_slightly_worse_start_for_better_phrase(
     ]
 
 
+def test_position_box_continuity_keeps_nine_to_twelve_across_strings() -> None:
+    midi_sequence = [
+        73,
+        74,
+        75,
+        76,
+        68,
+        69,
+        70,
+        71,
+        64,
+        65,
+        66,
+        67,
+        59,
+        60,
+        61,
+        62,
+    ]
+
+    decoded = decode_audio_notes(
+        [
+            note(index * 0.25, pitch_midi)
+            for index, pitch_midi in enumerate(midi_sequence)
+        ]
+    )
+
+    assert positions(decoded) == [
+        (1, 9, 73),
+        (1, 10, 74),
+        (1, 11, 75),
+        (1, 12, 76),
+        (2, 9, 68),
+        (2, 10, 69),
+        (2, 11, 70),
+        (2, 12, 71),
+        (3, 9, 64),
+        (3, 10, 65),
+        (3, 11, 66),
+        (3, 12, 67),
+        (4, 9, 59),
+        (4, 10, 60),
+        (4, 11, 61),
+        (4, 12, 62),
+    ]
+
+
+def test_position_box_shift_cost_is_inspectable(monkeypatch) -> None:
+    calls = 0
+
+    def fake_candidates(pitch_midi: int) -> tuple[StringFretCandidate, ...]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return (StringFretCandidate(string=2, fret=9, pitch_midi=pitch_midi),)
+        return (
+            StringFretCandidate(string=1, fret=5, pitch_midi=pitch_midi),
+            StringFretCandidate(string=2, fret=10, pitch_midi=pitch_midi),
+        )
+
+    monkeypatch.setattr(simple_decoder, "candidate_positions_for_midi", fake_candidates)
+
+    debug_events = decode_audio_notes_with_debug([note(0.0, 68), note(0.5, 69)])
+    shifted_score = next(
+        score
+        for score in debug_events[1].candidate_scores
+        if score.candidate.string == 1 and score.candidate.fret == 5
+    )
+
+    assert shifted_score.previous_position_box_start == 9
+    assert shifted_score.candidate_position_box_start == 5
+    assert shifted_score.position_box_shift_cost == 2.0
+
+
 def test_repeated_note_switch_penalty_is_inspectable(monkeypatch) -> None:
     calls = 0
 
@@ -221,7 +295,15 @@ def test_ergonomic_weights_must_be_non_negative() -> None:
         ErgonomicDecoderWeights(fret_movement=-1.0)
 
 
-def test_tie_breaking_prefers_lower_fret_then_lower_string_number(monkeypatch) -> None:
+def test_position_box_shift_weight_must_be_non_negative() -> None:
+    with pytest.raises(
+        ValueError,
+        match="position_box_shift weight must be non-negative",
+    ):
+        ErgonomicDecoderWeights(position_box_shift=-1.0)
+
+
+def test_same_position_box_can_beat_lower_fret_candidate(monkeypatch) -> None:
     def fake_candidates(pitch_midi: int) -> tuple[StringFretCandidate, ...]:
         if pitch_midi == 50:
             return (StringFretCandidate(string=3, fret=5, pitch_midi=50),)
@@ -241,7 +323,7 @@ def test_tie_breaking_prefers_lower_fret_then_lower_string_number(monkeypatch) -
 
     assert positions(decoded) == [
         (3, 5, 50),
-        (4, 4, 60),
+        (2, 6, 60),
     ]
 
 

@@ -25,8 +25,9 @@ INITIAL_FRET_COST_WEIGHT = 1.0
 FRET_MOVEMENT_COST_WEIGHT = 1.0
 STRING_MOVEMENT_COST_WEIGHT = 0.25
 POSITION_SHIFT_COST_WEIGHT = 0.5
+POSITION_BOX_SHIFT_COST_WEIGHT = 0.5
 REPEATED_NOTE_SWITCH_COST_WEIGHT = 2.0
-OPEN_STRING_COST_WEIGHT = 0.0
+OPEN_STRING_COST_WEIGHT = 3.0
 HIGH_FRET_COST_WEIGHT = 0.05
 DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT = 6.0
 
@@ -43,6 +44,7 @@ class ErgonomicDecoderWeights:
     fret_movement: float = FRET_MOVEMENT_COST_WEIGHT
     string_movement: float = STRING_MOVEMENT_COST_WEIGHT
     position_shift: float = POSITION_SHIFT_COST_WEIGHT
+    position_box_shift: float = POSITION_BOX_SHIFT_COST_WEIGHT
     repeated_note_switch: float = REPEATED_NOTE_SWITCH_COST_WEIGHT
     open_string: float = OPEN_STRING_COST_WEIGHT
     high_fret: float = HIGH_FRET_COST_WEIGHT
@@ -53,6 +55,7 @@ class ErgonomicDecoderWeights:
             ("fret_movement", self.fret_movement),
             ("string_movement", self.string_movement),
             ("position_shift", self.position_shift),
+            ("position_box_shift", self.position_box_shift),
             ("repeated_note_switch", self.repeated_note_switch),
             ("open_string", self.open_string),
             ("high_fret", self.high_fret),
@@ -71,6 +74,9 @@ class CandidateScoreBreakdown:
     fret_movement_cost: float
     string_movement_cost: float
     position_shift_cost: float
+    candidate_position_box_start: int | None
+    previous_position_box_start: int | None
+    position_box_shift_cost: float
     repeated_note_switch_cost: float
     open_string_cost: float
     high_fret_cost: float
@@ -139,10 +145,14 @@ def _candidate_score_breakdown(
     fret_movement_cost = 0.0
     string_movement_cost = 0.0
     position_shift_cost = 0.0
+    candidate_position_box_start = _position_box_start(candidate.fret)
+    previous_position_box_start = None
+    position_box_shift_cost = 0.0
     repeated_note_switch_cost = 0.0
     if previous_candidate is None:
         initial_fret_cost = weights.initial_fret * candidate.fret
     else:
+        previous_position_box_start = _position_box_start(previous_candidate.fret)
         fret_delta = abs(candidate.fret - previous_candidate.fret)
         string_delta = abs(candidate.string - previous_candidate.string)
         fret_movement_cost = weights.fret_movement * fret_delta
@@ -150,6 +160,13 @@ def _candidate_score_breakdown(
         # This mild extra term nudges the selected phrase toward stable hand
         # positions without trying to model full guitar technique.
         position_shift_cost = weights.position_shift * max(0, fret_delta - 4)
+        if (
+            candidate_position_box_start is not None
+            and previous_position_box_start is not None
+        ):
+            position_box_shift_cost = weights.position_box_shift * abs(
+                candidate_position_box_start - previous_position_box_start
+            )
         if (
             previous_pitch_midi == candidate.pitch_midi
             and (
@@ -159,13 +176,23 @@ def _candidate_score_breakdown(
         ):
             repeated_note_switch_cost = weights.repeated_note_switch
 
-    open_string_cost = weights.open_string if candidate.fret == 0 else 0.0
+    open_string_cost = (
+        weights.open_string
+        if candidate.fret == 0
+        and previous_candidate is not None
+        and (
+            previous_candidate.string != candidate.string
+            or previous_candidate.fret != candidate.fret
+        )
+        else 0.0
+    )
     high_fret_cost = weights.high_fret * candidate.fret
     base_cost = (
         initial_fret_cost
         + fret_movement_cost
         + string_movement_cost
         + position_shift_cost
+        + position_box_shift_cost
         + repeated_note_switch_cost
         + open_string_cost
         + high_fret_cost
@@ -185,6 +212,9 @@ def _candidate_score_breakdown(
         fret_movement_cost=fret_movement_cost,
         string_movement_cost=string_movement_cost,
         position_shift_cost=position_shift_cost,
+        candidate_position_box_start=candidate_position_box_start,
+        previous_position_box_start=previous_position_box_start,
+        position_box_shift_cost=position_box_shift_cost,
         repeated_note_switch_cost=repeated_note_switch_cost,
         open_string_cost=open_string_cost,
         high_fret_cost=high_fret_cost,
@@ -196,6 +226,12 @@ def _candidate_score_breakdown(
         tie_break_string=candidate.string,
         previous_candidate=previous_candidate,
     )
+
+
+def _position_box_start(fret: int) -> int | None:
+    if fret == 0:
+        return None
+    return ((fret - 1) // 4) * 4 + 1
 
 
 def _candidate_from_decoded_event(
@@ -429,6 +465,7 @@ __all__ = [
     "LeftHandFretLikelihood",
     "LeftHandFretLikelihoodByTime",
     "OPEN_STRING_COST_WEIGHT",
+    "POSITION_BOX_SHIFT_COST_WEIGHT",
     "POSITION_SHIFT_COST_WEIGHT",
     "REPEATED_NOTE_SWITCH_COST_WEIGHT",
     "STRING_MOVEMENT_COST_WEIGHT",
