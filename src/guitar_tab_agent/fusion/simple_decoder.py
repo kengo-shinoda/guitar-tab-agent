@@ -458,9 +458,12 @@ def decode_audio_notes_top_k(
 ) -> tuple[DecodedTabCandidate, ...]:
     """Return up to `top_k` distinct deterministic TAB candidate paths.
 
-    This keeps the single-best decoder unchanged. The top-k mode retains the
-    best predecessor paths per candidate, then returns distinct string/fret
-    paths ordered by total sequence cost and deterministic tie-breakers.
+    This keeps the single-best decoder unchanged. This is a deterministic
+    beam-style search: at each note it keeps up to `top_k` distinct partial
+    paths after sorting and deduplication, then returns distinct complete
+    string/fret paths ordered by total sequence cost and deterministic
+    tie-breakers. It is not an exhaustive global top-k enumeration of every
+    possible complete path.
     """
 
     if top_k <= 0:
