@@ -141,6 +141,7 @@ uv run tabgen web --open-browser
 
 - [Audio-only MVP scope](docs/audio_only_mvp.md)
 - [Audio-only smoke checkpoint](docs/audio_only_smoke_checkpoint.md)
+- [Local web UI smoke checkpoint](docs/local_web_smoke_checkpoint.md)
 - [Architecture](docs/architecture.md)
 - Future/advanced video material:
   - [Real-image hand landmark smoke test](docs/real_image_hand_landmark_smoke.md)
