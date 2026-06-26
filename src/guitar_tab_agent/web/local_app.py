@@ -15,6 +15,10 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from guitar_tab_agent.audio.basic_pitch_adapter import BasicPitchUnavailableError
+from guitar_tab_agent.fusion.simple_decoder import (
+    FingeringPosition,
+    parse_fingering_position,
+)
 from guitar_tab_agent.tab.ascii_tab import render_ascii_tab
 from guitar_tab_agent.workflows import (
     RenderedTabCandidate,
@@ -40,6 +44,7 @@ class AudioToTabWebOptions:
     min_duration: float | None = None
     min_pitch: int | None = None
     max_pitch: int | None = None
+    first_position: FingeringPosition | None = None
 
 
 def _first_query_value(
@@ -67,11 +72,17 @@ def parse_audio_to_tab_options(query_string: str) -> AudioToTabWebOptions:
     """Parse web query parameters into workflow filter options."""
 
     query = parse_qs(query_string, keep_blank_values=True)
+    first_position_value = _first_query_value(query, "first_position")
     return AudioToTabWebOptions(
         min_confidence=_optional_float(query, "min_confidence"),
         min_duration=_optional_float(query, "min_duration"),
         min_pitch=_optional_int(query, "min_pitch"),
         max_pitch=_optional_int(query, "max_pitch"),
+        first_position=(
+            parse_fingering_position(first_position_value)
+            if first_position_value is not None
+            else None
+        ),
     )
 
 
@@ -97,6 +108,7 @@ def generate_tab_from_upload(
             min_duration=options.min_duration,
             min_pitch=options.min_pitch,
             max_pitch=options.max_pitch,
+            first_position=options.first_position,
         )
 
 
@@ -134,6 +146,7 @@ def generate_tab_response_from_upload(
             min_duration=options.min_duration,
             min_pitch=options.min_pitch,
             max_pitch=options.max_pitch,
+            first_position=options.first_position,
         )
 
     candidate_payloads = [_candidate_payload(candidate) for candidate in candidates]
@@ -212,6 +225,9 @@ def render_index_html() -> str:
     <label>Maximum MIDI pitch
       <input id="max-pitch" name="max_pitch" type="number" min="0" max="127" step="1" placeholder="88">
     </label>
+    <label>Optional first-note position hint
+      <input id="first-position" name="first_position" type="text" placeholder="5s-0f">
+    </label>
     <button type="submit">Generate</button>
     <button id="copy-tab" type="button">Copy TAB</button>
     <button id="download-tab" type="button" disabled>Download TAB</button>
@@ -280,7 +296,7 @@ def render_index_html() -> str:
       }}
 
       const params = new URLSearchParams();
-      for (const id of ["min-confidence", "min-duration", "min-pitch", "max-pitch"]) {{
+      for (const id of ["min-confidence", "min-duration", "min-pitch", "max-pitch", "first-position"]) {{
         const input = document.getElementById(id);
         if (input.value) {{
           params.set(input.name, input.value);
