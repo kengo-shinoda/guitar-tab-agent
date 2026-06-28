@@ -39,22 +39,27 @@ guarantee of the exact string/fret positions used by the player.
 
 ## Quick Start
 
-Install project and development dependencies:
+Install the repository for local development:
 
 ```bash
 uv sync
 ```
 
-For real audio transcription commands, install the optional audio dependencies
-into the same environment:
+Install optional audio transcription dependencies:
 
 ```bash
-uv pip install -e '.[audio]'
+uv sync --extra audio
 ```
 
 This installs Basic Pitch and its runtime compatibility dependency on
 `setuptools`, which is needed by some Basic Pitch dependency paths that import
 `pkg_resources`.
+
+If you prefer a requirements-style install, use:
+
+```bash
+uv pip install -r requirements-audio.txt
+```
 
 You can skip the optional audio dependencies when using commands that do not
 transcribe audio, such as `notes-to-tab` and `candidates`.
@@ -88,7 +93,7 @@ dependency. Real audio transcription still requires the optional audio
 dependencies:
 
 ```bash
-uv pip install -e '.[audio]'
+uv sync --extra audio
 ```
 
 ## CLI Examples
