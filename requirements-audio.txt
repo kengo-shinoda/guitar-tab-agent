@@ -1,0 +1,9 @@
+# Optional audio transcription dependencies for guitar-tab-agent.
+# Install with:
+#   uv pip install -r requirements-audio.txt
+#
+# Prefer the project extra when developing from the repository:
+#   uv sync --extra audio
+
+basic-pitch
+setuptools>=69
