@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "guitar-tab-agent"
 version = "0.1.0"
-description = "Generate editable guitar TAB candidates from performance videos."
+description = "Local-first audio-to-TAB draft generation for short guitar phrases."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = []
