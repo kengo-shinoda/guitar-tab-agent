@@ -4,6 +4,10 @@
 #
 # Prefer the project extra when developing from the repository:
 #   uv sync --extra audio
+#
+# Basic Pitch currently imports pkg_resources through one of its runtime paths.
+# pkg_resources is available in older setuptools releases, but not in newer
+# setuptools versions such as 82.x.
 
 basic-pitch
-setuptools>=69
+setuptools>=69,<81
