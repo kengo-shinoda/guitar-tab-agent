@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Current project scope
+    url: https://github.com/kengo-shinoda/guitar-tab-agent/blob/main/docs/current_state.md
+    about: Read the current product scope, limitations, and near-term direction before opening broad feature requests.
