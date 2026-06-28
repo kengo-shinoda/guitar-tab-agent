@@ -245,6 +245,8 @@ def render_index_html() -> str:
       <input id="first-position" name="first_position" type="text" placeholder="5s-0f">
     </label>
     <button type="submit">Generate</button>
+    <button id="play-tab" type="button" disabled>Play selected</button>
+    <button id="stop-tab" type="button" disabled>Stop</button>
     <button id="copy-tab" type="button">Copy TAB</button>
     <button id="download-tab" type="button" disabled>Download TAB</button>
   </form>
@@ -258,17 +260,53 @@ def render_index_html() -> str:
     const form = document.getElementById("tab-form");
     const message = document.getElementById("message");
     const output = document.getElementById("tab-output");
+    const playButton = document.getElementById("play-tab");
+    const stopButton = document.getElementById("stop-tab");
     const copyButton = document.getElementById("copy-tab");
     const downloadButton = document.getElementById("download-tab");
     const candidateSection = document.getElementById("candidate-section");
     const candidateList = document.getElementById("candidate-list");
     const downloadFilename = "guitar-tab-agent-tab.txt";
     let selectedTabText = "";
+    let selectedCandidateEvents = [];
+    let audioContext = null;
+    let activeOscillators = [];
+    let playbackTimers = [];
 
-    function setSelectedTab(tabText) {{
+    function midiToFrequency(pitchMidi) {{
+      return 440 * 2 ** ((pitchMidi - 69) / 12);
+    }}
+
+    function stopPlayback() {{
+      for (const timer of playbackTimers) {{
+        clearTimeout(timer);
+      }}
+      playbackTimers = [];
+      for (const oscillator of activeOscillators) {{
+        try {{
+          oscillator.stop();
+        }} catch (error) {{
+          // Oscillator may already have stopped.
+        }}
+        try {{
+          oscillator.disconnect();
+        }} catch (error) {{
+          // Oscillator may already be disconnected.
+        }}
+      }}
+      activeOscillators = [];
+      playButton.disabled = !selectedCandidateEvents.length;
+      stopButton.disabled = true;
+    }}
+
+    function setSelectedCandidate(tabText, events) {{
+      stopPlayback();
       selectedTabText = tabText || "";
+      selectedCandidateEvents = Array.isArray(events) ? events : [];
       output.textContent = selectedTabText;
       downloadButton.disabled = !selectedTabText;
+      playButton.disabled = !selectedCandidateEvents.length;
+      stopButton.disabled = true;
     }}
 
     function renderCandidates(candidates) {{
@@ -283,7 +321,7 @@ def render_index_html() -> str:
         input.name = "tab-candidate";
         input.value = String(candidate.rank);
         input.checked = candidate.rank === 1;
-        input.addEventListener("change", () => setSelectedTab(candidate.tab));
+        input.addEventListener("change", () => setSelectedCandidate(candidate.tab, candidate.events));
 
         const title = document.createElement("span");
         title.textContent = ` Candidate ${{candidate.rank}} score=${{Number(candidate.score).toFixed(3)}}`;
@@ -301,7 +339,7 @@ def render_index_html() -> str:
     form.addEventListener("submit", async (event) => {{
       event.preventDefault();
       message.textContent = "";
-      setSelectedTab("");
+      setSelectedCandidate("", []);
       renderCandidates([]);
 
       const fileInput = document.getElementById("audio-file");
@@ -336,8 +374,72 @@ def render_index_html() -> str:
       message.textContent = "";
       const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
       renderCandidates(candidates);
-      setSelectedTab(payload.tab);
+      setSelectedCandidate(payload.tab, candidates[0] ? candidates[0].events : []);
     }});
+
+    playButton.addEventListener("click", async () => {{
+      if (!selectedCandidateEvents.length) {{
+        return;
+      }}
+      stopPlayback();
+      audioContext = audioContext || new AudioContext();
+      if (audioContext.state === "suspended") {{
+        await audioContext.resume();
+      }}
+
+      const starts = selectedCandidateEvents.map((event) => Number(event.start)).filter(Number.isFinite);
+      const baseStart = starts.length ? Math.min(...starts) : 0;
+      const scheduleStart = audioContext.currentTime + 0.05;
+      let latestEnd = scheduleStart;
+
+      for (const event of selectedCandidateEvents) {{
+        const pitchMidi = Number(event.pitch_midi);
+        const startSeconds = Number(event.start);
+        const endSeconds = Number(event.end);
+        if (!Number.isFinite(pitchMidi) || !Number.isFinite(startSeconds) || !Number.isFinite(endSeconds)) {{
+          continue;
+        }}
+
+        const noteStart = scheduleStart + Math.max(0, startSeconds - baseStart);
+        const duration = Math.max(0.05, endSeconds - startSeconds);
+        const noteEnd = noteStart + duration;
+        const releaseStart = Math.max(noteStart + 0.01, noteEnd - 0.02);
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(midiToFrequency(pitchMidi), noteStart);
+        gain.gain.setValueAtTime(0.0001, noteStart);
+        gain.gain.exponentialRampToValueAtTime(0.08, noteStart + 0.01);
+        gain.gain.setValueAtTime(0.08, releaseStart);
+        gain.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+        oscillator.start(noteStart);
+        oscillator.stop(noteEnd + 0.01);
+        oscillator.addEventListener("ended", () => {{
+          try {{
+            oscillator.disconnect();
+            gain.disconnect();
+          }} catch (error) {{
+            // Nodes may already be disconnected after Stop.
+          }}
+        }});
+        activeOscillators.push(oscillator);
+        latestEnd = Math.max(latestEnd, noteEnd);
+      }}
+
+      playButton.disabled = true;
+      stopButton.disabled = false;
+      const resetTimer = setTimeout(() => {{
+        activeOscillators = [];
+        playButton.disabled = !selectedCandidateEvents.length;
+        stopButton.disabled = true;
+      }}, Math.max(0, latestEnd - audioContext.currentTime) * 1000 + 50);
+      playbackTimers.push(resetTimer);
+    }});
+
+    stopButton.addEventListener("click", stopPlayback);
 
     copyButton.addEventListener("click", async () => {{
       if (selectedTabText) {{

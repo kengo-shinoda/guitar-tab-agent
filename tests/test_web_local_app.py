@@ -409,6 +409,16 @@ def test_render_index_html_includes_download_tab_control() -> None:
     assert "link.download = downloadFilename" in html
 
 
+def test_render_index_html_includes_selected_candidate_playback_controls() -> None:
+    html = render_index_html()
+
+    assert 'id="play-tab"' in html
+    assert "Play selected" in html
+    assert 'id="stop-tab"' in html
+    assert ">Stop</button>" in html
+    assert "new AudioContext()" in html
+
+
 def test_render_index_html_includes_candidate_selection_ui() -> None:
     html = render_index_html()
 
@@ -417,7 +427,38 @@ def test_render_index_html_includes_candidate_selection_ui() -> None:
     assert 'input.name = "tab-candidate"' in html
     assert "Candidate ${candidate.rank} score=" in html
     assert "renderCandidates(candidates)" in html
-    assert "setSelectedTab(candidate.tab)" in html
+    assert "setSelectedCandidate(candidate.tab, candidate.events)" in html
+
+
+def test_playback_uses_selected_candidate_events() -> None:
+    html = render_index_html()
+
+    assert "let selectedCandidateEvents = []" in html
+    assert "selectedCandidateEvents = Array.isArray(events) ? events : []" in html
+    assert "setSelectedCandidate(payload.tab, candidates[0] ? candidates[0].events : [])" in html
+    assert "for (const event of selectedCandidateEvents)" in html
+    assert "Number(event.pitch_midi)" in html
+    assert "Number(event.start)" in html
+    assert "Number(event.end)" in html
+
+
+def test_playback_includes_midi_pitch_to_frequency_conversion() -> None:
+    html = render_index_html()
+
+    assert "function midiToFrequency(pitchMidi)" in html
+    assert "440 * 2 ** ((pitchMidi - 69) / 12)" in html
+    assert "oscillator.frequency.setValueAtTime(midiToFrequency(pitchMidi)" in html
+    assert "gain.gain.exponentialRampToValueAtTime" in html
+
+
+def test_playback_stops_on_candidate_change_and_new_generation() -> None:
+    html = render_index_html()
+
+    assert "function stopPlayback()" in html
+    assert "setSelectedCandidate(\"\", [])" in html
+    assert "input.addEventListener(\"change\", () => setSelectedCandidate(candidate.tab, candidate.events))" in html
+    assert "stopButton.addEventListener(\"click\", stopPlayback)" in html
+    assert "oscillator.stop()" in html
 
 
 def test_copy_and_download_use_selected_tab_text() -> None:
