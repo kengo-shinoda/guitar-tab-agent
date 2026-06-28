@@ -3,6 +3,7 @@ import json
 import pytest
 
 import guitar_tab_agent.workflows as workflows
+from guitar_tab_agent.audio.note_filtering import select_single_note_by_onset
 from guitar_tab_agent.fusion.simple_decoder import FingeringPosition
 from guitar_tab_agent.schema import DecodedTabEvent, HandLandmarkFrame, NoteEvent
 from guitar_tab_agent.video.frame_list_json import FrameImageRecord
@@ -34,6 +35,21 @@ def _note(index: int, pitch_midi: int) -> NoteEvent:
         end=start + 0.2,
         pitch_midi=pitch_midi,
         confidence=1.0,
+        source="test",
+    )
+
+
+def _timed_note(
+    start: float,
+    end: float,
+    pitch_midi: int,
+    confidence: float,
+) -> NoteEvent:
+    return NoteEvent(
+        start=start,
+        end=end,
+        pitch_midi=pitch_midi,
+        confidence=confidence,
         source="test",
     )
 
@@ -132,6 +148,96 @@ def test_transcribe_audio_file_to_notes_filters_and_sorts(tmp_path) -> None:
     )
 
     assert [(note.start, note.pitch_midi) for note in notes] == [(0.5, 65)]
+
+
+def test_single_note_cleanup_keeps_highest_confidence_near_simultaneous_note() -> None:
+    notes = [
+        _timed_note(0.0, 0.25, 64, 0.6),
+        _timed_note(0.03, 0.25, 67, 0.9),
+        _timed_note(0.5, 0.75, 69, 0.7),
+    ]
+
+    selected = select_single_note_by_onset(notes)
+
+    assert [(note.start, note.pitch_midi) for note in selected] == [
+        (0.03, 67),
+        (0.5, 69),
+    ]
+
+
+def test_single_note_cleanup_keeps_separated_onsets() -> None:
+    notes = [
+        _timed_note(0.0, 0.2, 64, 0.6),
+        _timed_note(0.08, 0.28, 67, 0.9),
+    ]
+
+    selected = select_single_note_by_onset(notes)
+
+    assert [(note.start, note.pitch_midi) for note in selected] == [
+        (0.0, 64),
+        (0.08, 67),
+    ]
+
+
+def test_single_note_cleanup_keeps_notes_when_only_durations_overlap() -> None:
+    notes = [
+        _timed_note(0.0, 1.0, 64, 0.6),
+        _timed_note(0.2, 0.4, 67, 0.9),
+    ]
+
+    selected = select_single_note_by_onset(notes)
+
+    assert [(note.start, note.pitch_midi) for note in selected] == [
+        (0.0, 64),
+        (0.2, 67),
+    ]
+
+
+def test_single_note_cleanup_tie_breaks_deterministically() -> None:
+    notes = [
+        _timed_note(0.03, 0.2, 67, 0.8),
+        _timed_note(0.0, 0.2, 64, 0.8),
+    ]
+
+    selected = select_single_note_by_onset(notes)
+
+    assert [(note.start, note.pitch_midi) for note in selected] == [(0.0, 64)]
+
+
+def test_transcribe_audio_file_to_notes_does_not_enable_single_note_by_default(
+    tmp_path,
+) -> None:
+    audio_path = tmp_path / "input.wav"
+    audio_path.write_bytes(b"fake audio")
+
+    notes = transcribe_audio_file_to_notes(
+        audio_path,
+        transcriber=lambda path: [
+            _timed_note(0.0, 0.25, 64, 0.6),
+            _timed_note(0.03, 0.25, 67, 0.9),
+        ],
+    )
+
+    assert [(note.start, note.pitch_midi) for note in notes] == [
+        (0.0, 64),
+        (0.03, 67),
+    ]
+
+
+def test_transcribe_audio_file_to_notes_can_enable_single_note_mode(tmp_path) -> None:
+    audio_path = tmp_path / "input.wav"
+    audio_path.write_bytes(b"fake audio")
+
+    notes = transcribe_audio_file_to_notes(
+        audio_path,
+        single_note=True,
+        transcriber=lambda path: [
+            _timed_note(0.0, 0.25, 64, 0.6),
+            _timed_note(0.03, 0.25, 67, 0.9),
+        ],
+    )
+
+    assert [(note.start, note.pitch_midi) for note in notes] == [(0.03, 67)]
 
 
 def test_transcribe_audio_file_to_ascii_tab_reuses_audio_workflow(tmp_path) -> None:

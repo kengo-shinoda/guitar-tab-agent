@@ -41,6 +41,7 @@ def _decoded_event(
 def test_parse_audio_to_tab_options() -> None:
     options = parse_audio_to_tab_options(
         "min_confidence=0.55&min_duration=0.1&min_pitch=40&max_pitch=88&first_position=5s-0f"
+        "&single_note=1"
     )
 
     assert options == AudioToTabWebOptions(
@@ -49,6 +50,7 @@ def test_parse_audio_to_tab_options() -> None:
         min_pitch=40,
         max_pitch=88,
         first_position=FingeringPosition(string=5, fret=0),
+        single_note=True,
     )
 
 
@@ -78,6 +80,7 @@ def test_generate_tab_from_upload_uses_injected_workflow(tmp_path) -> None:
             int | None,
             int | None,
             FingeringPosition | None,
+            bool,
         ]
     ] = []
 
@@ -89,6 +92,7 @@ def test_generate_tab_from_upload_uses_injected_workflow(tmp_path) -> None:
         min_pitch=None,
         max_pitch=None,
         first_position=None,
+        single_note=False,
     ):
         calls.append(
             (
@@ -98,6 +102,7 @@ def test_generate_tab_from_upload_uses_injected_workflow(tmp_path) -> None:
                 min_pitch,
                 max_pitch,
                 first_position,
+                single_note,
             )
         )
         assert audio_path.read_bytes() == b"audio bytes"
@@ -112,18 +117,28 @@ def test_generate_tab_from_upload_uses_injected_workflow(tmp_path) -> None:
             min_pitch=40,
             max_pitch=88,
             first_position=FingeringPosition(string=5, fret=0),
+            single_note=True,
         ),
         workflow=fake_workflow,
     )
 
     assert tab == "e|0\nB|-\nG|-\nD|-\nA|-\nE|-"
     assert len(calls) == 1
-    _, min_confidence, min_duration, min_pitch, max_pitch, first_position = calls[0]
+    (
+        _,
+        min_confidence,
+        min_duration,
+        min_pitch,
+        max_pitch,
+        first_position,
+        single_note,
+    ) = calls[0]
     assert min_confidence == 0.55
     assert min_duration == 0.1
     assert min_pitch == 40
     assert max_pitch == 88
     assert first_position == FingeringPosition(string=5, fret=0)
+    assert single_note is True
 
 
 def test_generate_tab_from_upload_rejects_empty_audio() -> None:
@@ -150,11 +165,13 @@ def test_generate_tab_response_from_upload_returns_tab_and_candidates() -> None:
         min_pitch=None,
         max_pitch=None,
         first_position=None,
+        single_note=False,
     ):
         assert audio_path.read_bytes() == b"audio bytes"
         assert top_k == 5
         assert min_confidence == 0.55
         assert first_position == FingeringPosition(string=5, fret=0)
+        assert single_note is True
         return (
             RenderedTabCandidate(
                 rank=1,
@@ -179,6 +196,7 @@ def test_generate_tab_response_from_upload_returns_tab_and_candidates() -> None:
         options=AudioToTabWebOptions(
             min_confidence=0.55,
             first_position=FingeringPosition(string=5, fret=0),
+            single_note=True,
         ),
         workflow=fake_candidates_workflow,
     )
@@ -292,7 +310,7 @@ def test_generate_endpoint_returns_tab_and_candidates_json() -> None:
         )
         connection.request(
             "POST",
-            "/generate?min_confidence=0.55&first_position=5s-0f",
+            "/generate?min_confidence=0.55&first_position=5s-0f&single_note=1",
             body=b"audio bytes",
             headers={
                 "Content-Type": "audio/wav",
@@ -308,6 +326,7 @@ def test_generate_endpoint_returns_tab_and_candidates_json() -> None:
 
     assert response.status == HTTPStatus.OK
     assert calls[0]["first_position"] == FingeringPosition(string=5, fret=0)
+    assert calls[0]["single_note"] is True
     assert payload["tab"] == "best tab"
     assert payload["candidates"] == [
         {
@@ -395,6 +414,10 @@ def test_render_index_html_includes_controls_and_limitation() -> None:
     assert 'id="first-position"' in html
     assert 'name="first_position"' in html
     assert 'placeholder="5s-0f"' in html
+    assert 'id="single-note"' in html
+    assert 'name="single_note"' in html
+    assert 'type="checkbox"' in html
+    assert "Single-note mode" in html
     assert "playable/editable TAB draft" in html
 
 

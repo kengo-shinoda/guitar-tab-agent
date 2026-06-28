@@ -6,6 +6,8 @@ from collections.abc import Sequence
 
 from guitar_tab_agent.schema import NoteEvent
 
+DEFAULT_SINGLE_NOTE_ONSET_TOLERANCE = 0.05
+
 
 def sort_note_events_chronologically(notes: Sequence[NoteEvent]) -> list[NoteEvent]:
     """Return notes sorted by a deterministic chronological key."""
@@ -67,8 +69,60 @@ def validate_note_filter_thresholds(
         raise ValueError("min_pitch must be less than or equal to max_pitch")
 
 
+def select_single_note_by_onset(
+    notes: Sequence[NoteEvent],
+    *,
+    onset_tolerance: float = DEFAULT_SINGLE_NOTE_ONSET_TOLERANCE,
+) -> list[NoteEvent]:
+    """Keep one highest-confidence note per near-simultaneous onset group.
+
+    This is an optional MVP cleanup for mostly single-note inputs. It groups by
+    note start times only; notes are not removed merely because their durations
+    overlap.
+    """
+
+    if onset_tolerance < 0:
+        raise ValueError("onset_tolerance must be non-negative")
+
+    sorted_notes = sort_note_events_chronologically(notes)
+    selected: list[NoteEvent] = []
+    group: list[NoteEvent] = []
+    group_start: float | None = None
+
+    def best_note(group_notes: Sequence[NoteEvent]) -> NoteEvent:
+        return sorted(
+            group_notes,
+            key=lambda note: (
+                -note.confidence,
+                note.start,
+                note.end,
+                note.pitch_midi,
+                note.source,
+            ),
+        )[0]
+
+    for note in sorted_notes:
+        if group_start is None:
+            group_start = note.start
+            group = [note]
+            continue
+        if note.start - group_start <= onset_tolerance:
+            group.append(note)
+            continue
+        selected.append(best_note(group))
+        group_start = note.start
+        group = [note]
+
+    if group:
+        selected.append(best_note(group))
+
+    return sort_note_events_chronologically(selected)
+
+
 __all__ = [
+    "DEFAULT_SINGLE_NOTE_ONSET_TOLERANCE",
     "filter_note_events",
+    "select_single_note_by_onset",
     "sort_note_events_chronologically",
     "validate_note_filter_thresholds",
 ]

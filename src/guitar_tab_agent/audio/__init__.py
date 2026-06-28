@@ -8,13 +8,17 @@ from guitar_tab_agent.audio.basic_pitch_adapter import (
     transcribe_audio_to_notes,
 )
 from guitar_tab_agent.audio.note_filtering import (
+    DEFAULT_SINGLE_NOTE_ONSET_TOLERANCE,
     filter_note_events,
+    select_single_note_by_onset,
     validate_note_filter_thresholds,
 )
 
 __all__ = [
     "BasicPitchUnavailableError",
+    "DEFAULT_SINGLE_NOTE_ONSET_TOLERANCE",
     "filter_note_events",
+    "select_single_note_by_onset",
     "transcribe_audio_to_notes",
     "validate_note_filter_thresholds",
 ]

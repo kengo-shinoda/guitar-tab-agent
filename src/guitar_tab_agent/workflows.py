@@ -15,6 +15,7 @@ from pathlib import Path
 from guitar_tab_agent.audio.basic_pitch_adapter import transcribe_audio_to_notes
 from guitar_tab_agent.audio.note_filtering import (
     filter_note_events,
+    select_single_note_by_onset,
     sort_note_events_chronologically,
     validate_note_filter_thresholds,
 )
@@ -64,6 +65,7 @@ def transcribe_audio_file_to_notes(
     min_duration: float | None = None,
     min_pitch: int | None = None,
     max_pitch: int | None = None,
+    single_note: bool = False,
     transcriber: NoteTranscriber = transcribe_audio_to_notes,
 ) -> list[NoteEvent]:
     """Transcribe an audio file, apply optional filters, and sort notes."""
@@ -74,16 +76,18 @@ def transcribe_audio_file_to_notes(
         min_pitch=min_pitch,
         max_pitch=max_pitch,
     )
-    notes = transcriber(audio_path)
-    return sort_note_events_chronologically(
+    notes = sort_note_events_chronologically(
         filter_note_events(
-            notes,
+            transcriber(audio_path),
             min_confidence=min_confidence,
             min_duration=min_duration,
             min_pitch=min_pitch,
             max_pitch=max_pitch,
         )
     )
+    if single_note:
+        return select_single_note_by_onset(notes)
+    return notes
 
 
 def transcribe_audio_file_to_ascii_tab(
@@ -96,6 +100,7 @@ def transcribe_audio_file_to_ascii_tab(
     left_hand_fret_likelihood_by_time: LeftHandFretLikelihoodByTime | None = None,
     left_hand_weight: float = DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
     first_position: FingeringPosition | None = None,
+    single_note: bool = False,
     transcriber: NoteTranscriber = transcribe_audio_to_notes,
 ) -> str:
     """Run the current audio-only transcription-to-TAB workflow."""
@@ -106,6 +111,7 @@ def transcribe_audio_file_to_ascii_tab(
         min_duration=min_duration,
         min_pitch=min_pitch,
         max_pitch=max_pitch,
+        single_note=single_note,
         transcriber=transcriber,
     )
     return render_notes_to_ascii_tab(
@@ -127,6 +133,7 @@ def transcribe_audio_file_to_ascii_tab_candidates(
     left_hand_fret_likelihood_by_time: LeftHandFretLikelihoodByTime | None = None,
     left_hand_weight: float = DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT,
     first_position: FingeringPosition | None = None,
+    single_note: bool = False,
     transcriber: NoteTranscriber = transcribe_audio_to_notes,
 ) -> tuple[RenderedTabCandidate, ...]:
     """Run the audio-to-TAB workflow and render multiple candidate paths."""
@@ -137,6 +144,7 @@ def transcribe_audio_file_to_ascii_tab_candidates(
         min_duration=min_duration,
         min_pitch=min_pitch,
         max_pitch=max_pitch,
+        single_note=single_note,
         transcriber=transcriber,
     )
     return render_notes_to_ascii_tab_candidates(
