@@ -243,6 +243,14 @@ def build_parser() -> argparse.ArgumentParser:
     _add_audio_filter_arguments(audio_to_tab)
     _add_top_k_argument(audio_to_tab)
     _add_first_position_argument(audio_to_tab)
+    audio_to_tab.add_argument(
+        "--single-note",
+        action="store_true",
+        help=(
+            "keep only the highest-confidence note for near-simultaneous "
+            "onsets before TAB decoding"
+        ),
+    )
     _add_left_hand_likelihood_arguments(audio_to_tab)
 
     landmarks_to_likelihood = subparsers.add_parser(
@@ -397,6 +405,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     left_hand_fret_likelihood_by_time=_load_left_hand_likelihood_arg(args),
                     left_hand_weight=args.left_hand_weight,
                     first_position=_parse_first_position_arg(args),
+                    single_note=args.single_note,
                     transcriber=transcribe_audio_to_notes,
                 )
                 _write_or_print(tab, args.out)
@@ -411,6 +420,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     left_hand_fret_likelihood_by_time=_load_left_hand_likelihood_arg(args),
                     left_hand_weight=args.left_hand_weight,
                     first_position=_parse_first_position_arg(args),
+                    single_note=args.single_note,
                     transcriber=transcribe_audio_to_notes,
                 )
                 _write_or_print(format_rendered_tab_candidates(candidates), args.out)

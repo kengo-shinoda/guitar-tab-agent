@@ -46,6 +46,7 @@ class AudioToTabWebOptions:
     min_pitch: int | None = None
     max_pitch: int | None = None
     first_position: FingeringPosition | None = None
+    single_note: bool = False
 
 
 def _first_query_value(
@@ -69,6 +70,11 @@ def _optional_int(query: dict[str, list[str]], key: str) -> int | None:
     return None if value is None else int(value)
 
 
+def _optional_bool(query: dict[str, list[str]], key: str) -> bool:
+    value = _first_query_value(query, key)
+    return value is not None and value.lower() in {"1", "true", "on", "yes"}
+
+
 def parse_audio_to_tab_options(query_string: str) -> AudioToTabWebOptions:
     """Parse web query parameters into workflow filter options."""
 
@@ -84,6 +90,7 @@ def parse_audio_to_tab_options(query_string: str) -> AudioToTabWebOptions:
             if first_position_value is not None
             else None
         ),
+        single_note=_optional_bool(query, "single_note"),
     )
 
 
@@ -110,6 +117,7 @@ def generate_tab_from_upload(
             min_pitch=options.min_pitch,
             max_pitch=options.max_pitch,
             first_position=options.first_position,
+            single_note=options.single_note,
         )
 
 
@@ -163,6 +171,7 @@ def generate_tab_response_from_upload(
             min_pitch=options.min_pitch,
             max_pitch=options.max_pitch,
             first_position=options.first_position,
+            single_note=options.single_note,
         )
 
     candidate_payloads = [_candidate_payload(candidate) for candidate in candidates]
@@ -243,6 +252,10 @@ def render_index_html() -> str:
     </label>
     <label>Optional first-note position hint
       <input id="first-position" name="first_position" type="text" placeholder="5s-0f">
+    </label>
+    <label>
+      <input id="single-note" name="single_note" type="checkbox" value="1">
+      Single-note mode
     </label>
     <button type="submit">Generate</button>
     <button id="play-tab" type="button" disabled>Play selected</button>
@@ -355,6 +368,10 @@ def render_index_html() -> str:
         if (input.value) {{
           params.set(input.name, input.value);
         }}
+      }}
+      const singleNoteInput = document.getElementById("single-note");
+      if (singleNoteInput.checked) {{
+        params.set(singleNoteInput.name, singleNoteInput.value);
       }}
 
       message.textContent = "Generating...";
