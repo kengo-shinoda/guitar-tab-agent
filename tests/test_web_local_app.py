@@ -432,6 +432,15 @@ def test_render_index_html_includes_download_tab_control() -> None:
     assert "link.download = downloadFilename" in html
 
 
+def test_render_index_html_makes_tab_blocks_wide_and_scrollable() -> None:
+    html = render_index_html()
+
+    assert "width: 240ch" in html
+    assert "white-space: pre" in html
+    assert "overflow-x: auto" in html
+    assert "max-width: 100%" in html
+
+
 def test_render_index_html_includes_selected_candidate_playback_controls() -> None:
     html = render_index_html()
 
