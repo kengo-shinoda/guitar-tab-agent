@@ -19,6 +19,7 @@ from guitar_tab_agent.fusion.simple_decoder import (
     FingeringPosition,
     parse_fingering_position,
 )
+from guitar_tab_agent.schema import DecodedTabEvent
 from guitar_tab_agent.tab.ascii_tab import render_ascii_tab
 from guitar_tab_agent.workflows import (
     RenderedTabCandidate,
@@ -112,11 +113,26 @@ def generate_tab_from_upload(
         )
 
 
+def _event_payload(index: int, event: DecodedTabEvent) -> dict[str, object]:
+    return {
+        "index": index,
+        "start": event.start,
+        "end": event.end,
+        "pitch_midi": event.pitch_midi,
+        "string": event.string,
+        "fret": event.fret,
+    }
+
+
 def _candidate_payload(candidate: RenderedTabCandidate) -> dict[str, object]:
     return {
         "rank": candidate.rank,
         "score": candidate.score,
         "tab": candidate.tab,
+        "events": [
+            _event_payload(index, event)
+            for index, event in enumerate(candidate.events, start=1)
+        ],
     }
 
 
