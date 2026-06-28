@@ -94,7 +94,7 @@ class CliTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertEqual(
                 out_path.read_text(encoding="utf-8"),
-                "e|0--\nB|---\nG|---\nD|---\nA|--0\nE|---",
+                "e|0--------\nB|---------\nG|---------\nD|---------\nA|------0--\nE|---------",
             )
 
     def test_notes_to_tab_prints_stdout_without_output_file(self) -> None:
@@ -119,7 +119,7 @@ class CliTest(unittest.TestCase):
                 exit_code = main(["notes-to-tab", str(notes_path)])
 
             self.assertEqual(exit_code, 0)
-            self.assertEqual(output.getvalue(), "e|0\nB|-\nG|-\nD|-\nA|-\nE|-\n")
+            self.assertEqual(output.getvalue(), "e|0--\nB|---\nG|---\nD|---\nA|---\nE|---\n")
 
     def test_notes_to_tab_top_k_prints_labeled_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -186,7 +186,7 @@ class CliTest(unittest.TestCase):
             rendered = output.getvalue()
             self.assertEqual(exit_code, 0)
             self.assertIn("Candidate 1 score=", rendered)
-            self.assertIn("B|78910", rendered)
+            self.assertIn("B|7--8--9--10-", rendered)
 
     def test_notes_to_tab_top_k_rejects_invalid_count(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -267,7 +267,7 @@ class CliTest(unittest.TestCase):
                 exit_code = main(["notes-to-tab", str(notes_path)])
 
             self.assertEqual(exit_code, 0)
-            self.assertEqual(output.getvalue(), "e|4\nB|-\nG|-\nD|-\nA|-\nE|-\n")
+            self.assertEqual(output.getvalue(), "e|4--\nB|---\nG|---\nD|---\nA|---\nE|---\n")
 
     def test_notes_to_tab_uses_left_hand_likelihood_for_fretted_candidate(
         self,
@@ -306,7 +306,7 @@ class CliTest(unittest.TestCase):
                 )
 
             self.assertEqual(exit_code, 0)
-            self.assertEqual(output.getvalue(), "e|-\nB|9\nG|-\nD|-\nA|-\nE|-\n")
+            self.assertEqual(output.getvalue(), "e|---\nB|9--\nG|---\nD|---\nA|---\nE|---\n")
 
     def test_notes_to_tab_left_hand_weight_can_favor_fretted_over_open(
         self,
@@ -347,7 +347,7 @@ class CliTest(unittest.TestCase):
                 )
 
             self.assertEqual(exit_code, 0)
-            self.assertEqual(output.getvalue(), "e|-\nB|-\nG|9\nD|-\nA|-\nE|-\n")
+            self.assertEqual(output.getvalue(), "e|---\nB|---\nG|9--\nD|---\nA|---\nE|---\n")
 
     def test_notes_to_tab_invalid_json_is_readable_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -415,12 +415,12 @@ class CliTest(unittest.TestCase):
         self.assertEqual(
             tab_lines,
             [
-                "e|013",
-                "B|---",
-                "G|---",
-                "D|---",
-                "A|---",
-                "E|---",
+                "e|0--1--3--",
+                "B|---------",
+                "G|---------",
+                "D|---------",
+                "A|---------",
+                "E|---------",
             ],
         )
 
@@ -609,7 +609,7 @@ class CliTest(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertEqual(
                 out_path.read_text(encoding="utf-8"),
-                "e|0--\nB|---\nG|---\nD|---\nA|--0\nE|---",
+                "e|0--------\nB|---------\nG|---------\nD|---------\nA|------0--\nE|---------",
             )
 
     def test_audio_to_tab_decodes_only_filtered_notes(self) -> None:
@@ -656,7 +656,7 @@ class CliTest(unittest.TestCase):
             cli.transcribe_audio_to_notes = original_transcribe
 
         self.assertEqual(exit_code, 0)
-        self.assertEqual(output.getvalue(), "e|-0\nB|--\nG|--\nD|--\nA|--\nE|--\n")
+        self.assertEqual(output.getvalue(), "e|---0--\nB|------\nG|------\nD|------\nA|------\nE|------\n")
 
     def test_audio_to_tab_prints_stdout_without_output_file(self) -> None:
         original_transcribe = cli.transcribe_audio_to_notes
@@ -677,7 +677,7 @@ class CliTest(unittest.TestCase):
             cli.transcribe_audio_to_notes = original_transcribe
 
         self.assertEqual(exit_code, 0)
-        self.assertEqual(output.getvalue(), "e|0\nB|-\nG|-\nD|-\nA|-\nE|-\n")
+        self.assertEqual(output.getvalue(), "e|0--\nB|---\nG|---\nD|---\nA|---\nE|---\n")
 
     def test_audio_to_tab_top_k_uses_mocked_transcription(self) -> None:
         original_transcribe = cli.transcribe_audio_to_notes
@@ -734,7 +734,7 @@ class CliTest(unittest.TestCase):
         rendered = output.getvalue()
         self.assertEqual(exit_code, 0)
         self.assertIn("Candidate 1 score=", rendered)
-        self.assertIn("B|78910", rendered)
+        self.assertIn("B|7--8--9--10-", rendered)
 
     def test_audio_to_tab_uses_left_hand_likelihood_file(self) -> None:
         original_transcribe = cli.transcribe_audio_to_notes
@@ -768,7 +768,7 @@ class CliTest(unittest.TestCase):
             cli.transcribe_audio_to_notes = original_transcribe
 
         self.assertEqual(exit_code, 0)
-        self.assertEqual(output.getvalue(), "e|-\nB|9\nG|-\nD|-\nA|-\nE|-\n")
+        self.assertEqual(output.getvalue(), "e|---\nB|9--\nG|---\nD|---\nA|---\nE|---\n")
 
     def test_landmarks_to_left_hand_likelihood_writes_output_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

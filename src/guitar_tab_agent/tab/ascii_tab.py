@@ -23,6 +23,7 @@ STRING_LABELS: dict[int, str] = {
 }
 
 DEFAULT_SECONDS_PER_COLUMN = 0.25
+DEFAULT_EVENT_CELL_WIDTH = 3
 
 
 def _time_slot(start: float, seconds_per_column: float) -> int:
@@ -38,7 +39,7 @@ def render_ascii_tab(
 
     Events are sorted deterministically, then assigned to time slots using
     `round(event.start / seconds_per_column)`. Each time slot is widened when
-    needed to fit two-digit or larger fret numbers.
+    needed to fit fret numbers plus visible separation from the next event.
     """
 
     if seconds_per_column <= 0:
@@ -67,10 +68,16 @@ def render_ascii_tab(
         # A single monophonic decoded stream should not collide, but this keeps
         # output stable if multiple events quantize onto the same string/slot.
         events_by_slot_and_string.setdefault(key, token)
-        slot_widths[slot] = max(slot_widths.get(slot, 1), len(token))
+        slot_widths[slot] = max(
+            slot_widths.get(slot, DEFAULT_EVENT_CELL_WIDTH),
+            len(token) + 1,
+        )
 
     max_slot = max(slot_widths)
-    widths = [slot_widths.get(slot, 1) for slot in range(max_slot + 1)]
+    widths = [
+        slot_widths.get(slot, DEFAULT_EVENT_CELL_WIDTH)
+        for slot in range(max_slot + 1)
+    ]
 
     lines: list[str] = []
     for string_number, label in STRING_LABELS.items():
@@ -84,6 +91,7 @@ def render_ascii_tab(
 
 
 __all__ = [
+    "DEFAULT_EVENT_CELL_WIDTH",
     "DEFAULT_SECONDS_PER_COLUMN",
     "STRING_LABELS",
     "render_ascii_tab",
