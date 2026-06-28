@@ -212,7 +212,7 @@ def render_index_html() -> str:
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       line-height: 1.5;
       margin: 2rem auto;
-      max-width: 56rem;
+      max-width: min(100rem, calc(100vw - 2rem));
       padding: 0 1rem;
     }}
     label {{ display: block; font-weight: 600; margin-top: 1rem; }}
@@ -221,8 +221,11 @@ def render_index_html() -> str:
     pre {{
       background: #f6f8fa;
       border: 1px solid #d0d7de;
+      box-sizing: border-box;
+      max-width: 100%;
       overflow-x: auto;
       padding: 1rem;
+      width: 240ch;
       white-space: pre;
     }}
     .error {{ color: #b42318; font-weight: 600; }}
