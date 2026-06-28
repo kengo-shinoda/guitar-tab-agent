@@ -1,5 +1,7 @@
 # Roadmap
 
+> Current implementation status, product positioning, and deployment/marketing handoff are summarized in [`docs/current_state.md`](current_state.md). This roadmap is historical and directional; read the current-state handoff first before planning new work.
+
 This roadmap keeps the project practical for iterative work by coding agents. Each phase should be small enough to split into reviewable PRs, with tests and clear intermediate outputs.
 
 ## Phase 0: Repo Skeleton, Docs, Schemas, CLI, Audio-Only Baseline
