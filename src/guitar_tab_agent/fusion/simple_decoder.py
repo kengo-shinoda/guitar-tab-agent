@@ -30,6 +30,10 @@ POSITION_BOX_SHIFT_COST_WEIGHT = 0.5
 REPEATED_NOTE_SWITCH_COST_WEIGHT = 2.0
 OPEN_STRING_COST_WEIGHT = 3.0
 HIGH_FRET_COST_WEIGHT = 0.05
+HIGH_FRET_EXTRA_THRESHOLD = 17
+HIGH_FRET_EXTRA_COST_WEIGHT = 0.15
+NON_FIRST_STRING_VERY_HIGH_FRET_THRESHOLD = 21
+NON_FIRST_STRING_VERY_HIGH_FRET_COST = 3.0
 DEFAULT_LEFT_HAND_EVIDENCE_WEIGHT = 6.0
 
 CandidateCost = tuple[float, int, int]
@@ -243,6 +247,16 @@ def _candidate_score_breakdown(
         else 0.0
     )
     high_fret_cost = weights.high_fret * candidate.fret
+    if candidate.fret > HIGH_FRET_EXTRA_THRESHOLD:
+        high_fret_cost += (
+            candidate.fret - HIGH_FRET_EXTRA_THRESHOLD
+        ) * HIGH_FRET_EXTRA_COST_WEIGHT
+    if (
+        candidate.string != 1
+        and candidate.fret >= NON_FIRST_STRING_VERY_HIGH_FRET_THRESHOLD
+    ):
+        high_fret_cost += NON_FIRST_STRING_VERY_HIGH_FRET_COST
+
     base_cost = (
         initial_fret_cost
         + fret_movement_cost
