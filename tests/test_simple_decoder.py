@@ -190,6 +190,30 @@ def test_left_hand_score_components_are_inspectable() -> None:
     assert selected_score.sequence_cost == pytest.approx(3.45)
 
 
+def test_high_fret_extra_penalty_starts_above_threshold() -> None:
+    debug_events = decode_audio_notes_with_debug([note(0.0, 82)])
+
+    string_1_fret_18_score = next(
+        score
+        for score in debug_events[0].candidate_scores
+        if score.candidate.string == 1 and score.candidate.fret == 18
+    )
+
+    assert string_1_fret_18_score.high_fret_cost == pytest.approx(1.05)
+
+
+def test_non_first_string_very_high_fret_gets_extra_penalty() -> None:
+    debug_events = decode_audio_notes_with_debug([note(0.0, 80)])
+
+    string_2_fret_21_score = next(
+        score
+        for score in debug_events[0].candidate_scores
+        if score.candidate.string == 2 and score.candidate.fret == 21
+    )
+
+    assert string_2_fret_21_score.high_fret_cost == pytest.approx(4.65)
+
+
 def test_global_path_can_choose_slightly_worse_start_for_better_phrase(
     monkeypatch,
 ) -> None:
