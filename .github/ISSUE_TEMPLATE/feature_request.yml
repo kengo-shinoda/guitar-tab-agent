@@ -1,8 +1,7 @@
----
 name: Feature request
 description: Suggest a scoped improvement or future feature
 title: "Feature: "
-labels: ["type:feature"]
+labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
@@ -53,4 +52,3 @@ body:
           required: true
         - label: This request does not require copyrighted third-party demo material.
           required: true
----

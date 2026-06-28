@@ -1,8 +1,7 @@
----
 name: Bug report
 description: Report a reproducible problem in the current local-first audio-to-TAB MVP
 title: "Bug: "
-labels: ["type:bug"]
+labels: ["bug"]
 body:
   - type: markdown
     attributes:
@@ -80,4 +79,3 @@ body:
         Basic Pitch installed? yes/no
     validations:
       required: false
----

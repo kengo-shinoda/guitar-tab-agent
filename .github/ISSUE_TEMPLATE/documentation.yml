@@ -1,8 +1,7 @@
----
 name: Documentation improvement
 description: Suggest a correction or improvement to project documentation
 title: "Docs: "
-labels: ["type:docs"]
+labels: ["documentation"]
 body:
   - type: textarea
     id: location
@@ -33,4 +32,3 @@ body:
       options:
         - label: This documentation change keeps the current MVP framed as local-first, audio-only, candidate-based TAB draft generation.
           required: true
----

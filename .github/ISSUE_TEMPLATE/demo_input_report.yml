@@ -1,8 +1,7 @@
----
 name: Demo or input example report
 description: Share a safe, minimal example that demonstrates behavior
 title: "Example: "
-labels: ["type:example"]
+labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
@@ -58,4 +57,3 @@ body:
       description: What would a better candidate or correction look like?
     validations:
       required: false
----
