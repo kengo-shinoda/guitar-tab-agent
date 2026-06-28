@@ -60,8 +60,11 @@ def render_ascii_tab(
 
     events_by_slot_and_string: dict[tuple[int, int], str] = {}
     slot_widths: dict[int, int] = {}
+    last_rendered_slot = -1
     for event in sorted_events:
-        slot = _time_slot(event.start, seconds_per_column)
+        nominal_slot = _time_slot(event.start, seconds_per_column)
+        slot = max(nominal_slot, last_rendered_slot + 1)
+        last_rendered_slot = slot
         token = str(event.fret)
         key = (slot, event.string)
 

@@ -85,6 +85,32 @@ class RenderAsciiTabTest(unittest.TestCase):
             "e|---3--\nB|10----\nG|------\nD|------\nA|------\nE|------",
         )
 
+    def test_close_sequential_events_on_adjacent_strings_get_distinct_columns(self) -> None:
+        tab = render_ascii_tab(
+            [
+                DecodedTabEvent(
+                    start=0.0,
+                    end=0.2,
+                    string=1,
+                    fret=19,
+                    pitch_midi=88,
+                    confidence=1.0,
+                ),
+                DecodedTabEvent(
+                    start=0.05,
+                    end=0.25,
+                    string=2,
+                    fret=20,
+                    pitch_midi=84,
+                    confidence=1.0,
+                ),
+            ],
+            seconds_per_column=0.25,
+        )
+
+        self.assertIn("e|19----", tab)
+        self.assertIn("B|---20-", tab)
+
     def test_adjacent_two_digit_frets_do_not_concatenate(self) -> None:
         tab = render_ascii_tab(
             [
