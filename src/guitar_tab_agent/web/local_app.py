@@ -15,14 +15,25 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from guitar_tab_agent.audio.basic_pitch_adapter import BasicPitchUnavailableError
-from guitar_tab_agent.workflows import transcribe_audio_file_to_ascii_tab
+from guitar_tab_agent.fusion.simple_decoder import (
+    FingeringPosition,
+    parse_fingering_position,
+)
+from guitar_tab_agent.tab.ascii_tab import render_ascii_tab
+from guitar_tab_agent.workflows import (
+    RenderedTabCandidate,
+    transcribe_audio_file_to_ascii_tab,
+    transcribe_audio_file_to_ascii_tab_candidates,
+)
 
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+DEFAULT_TOP_K_CANDIDATES = 5
 
 AudioToTabWorkflow = Callable[..., str]
+AudioToTabCandidatesWorkflow = Callable[..., tuple[RenderedTabCandidate, ...]]
 
 
 @dataclass(frozen=True)
@@ -33,6 +44,7 @@ class AudioToTabWebOptions:
     min_duration: float | None = None
     min_pitch: int | None = None
     max_pitch: int | None = None
+    first_position: FingeringPosition | None = None
 
 
 def _first_query_value(
@@ -60,11 +72,17 @@ def parse_audio_to_tab_options(query_string: str) -> AudioToTabWebOptions:
     """Parse web query parameters into workflow filter options."""
 
     query = parse_qs(query_string, keep_blank_values=True)
+    first_position_value = _first_query_value(query, "first_position")
     return AudioToTabWebOptions(
         min_confidence=_optional_float(query, "min_confidence"),
         min_duration=_optional_float(query, "min_duration"),
         min_pitch=_optional_int(query, "min_pitch"),
         max_pitch=_optional_int(query, "max_pitch"),
+        first_position=(
+            parse_fingering_position(first_position_value)
+            if first_position_value is not None
+            else None
+        ),
     )
 
 
@@ -90,7 +108,53 @@ def generate_tab_from_upload(
             min_duration=options.min_duration,
             min_pitch=options.min_pitch,
             max_pitch=options.max_pitch,
+            first_position=options.first_position,
         )
+
+
+def _candidate_payload(candidate: RenderedTabCandidate) -> dict[str, object]:
+    return {
+        "rank": candidate.rank,
+        "score": candidate.score,
+        "tab": candidate.tab,
+    }
+
+
+def generate_tab_response_from_upload(
+    audio_bytes: bytes,
+    *,
+    filename: str,
+    options: AudioToTabWebOptions,
+    top_k: int = DEFAULT_TOP_K_CANDIDATES,
+    workflow: AudioToTabCandidatesWorkflow = transcribe_audio_file_to_ascii_tab_candidates,
+) -> dict[str, object]:
+    """Run the top-k audio-to-TAB path and return a web response payload."""
+
+    if not audio_bytes:
+        raise ValueError("audio upload is empty")
+    if top_k <= 0:
+        raise ValueError("top_k must be positive")
+
+    suffix = Path(filename).suffix or ".wav"
+    with tempfile.TemporaryDirectory(prefix="guitar-tab-agent-web-") as tmpdir:
+        audio_path = Path(tmpdir) / f"upload{suffix}"
+        audio_path.write_bytes(audio_bytes)
+        candidates = workflow(
+            audio_path,
+            top_k=top_k,
+            min_confidence=options.min_confidence,
+            min_duration=options.min_duration,
+            min_pitch=options.min_pitch,
+            max_pitch=options.max_pitch,
+            first_position=options.first_position,
+        )
+
+    candidate_payloads = [_candidate_payload(candidate) for candidate in candidates]
+    tab = candidate_payloads[0]["tab"] if candidate_payloads else render_ascii_tab([])
+    return {
+        "tab": tab,
+        "candidates": candidate_payloads,
+    }
 
 
 def error_response_for_exception(exc: Exception) -> tuple[HTTPStatus, dict[str, str]]:
@@ -138,6 +202,8 @@ def render_index_html() -> str:
     }}
     .error {{ color: #b42318; font-weight: 600; }}
     .muted {{ color: #52616b; }}
+    #candidate-list {{ margin-top: 1rem; }}
+    .candidate-option {{ display: block; margin: 0.5rem 0; }}
   </style>
 </head>
 <body>
@@ -159,25 +225,68 @@ def render_index_html() -> str:
     <label>Maximum MIDI pitch
       <input id="max-pitch" name="max_pitch" type="number" min="0" max="127" step="1" placeholder="88">
     </label>
+    <label>Optional first-note position hint
+      <input id="first-position" name="first_position" type="text" placeholder="5s-0f">
+    </label>
     <button type="submit">Generate</button>
     <button id="copy-tab" type="button">Copy TAB</button>
     <button id="download-tab" type="button" disabled>Download TAB</button>
   </form>
   <p id="message" class="error"></p>
   <pre id="tab-output" aria-live="polite"></pre>
+  <section id="candidate-section" hidden>
+    <h2>Candidate TABs</h2>
+    <div id="candidate-list"></div>
+  </section>
   <script>
     const form = document.getElementById("tab-form");
     const message = document.getElementById("message");
     const output = document.getElementById("tab-output");
     const copyButton = document.getElementById("copy-tab");
     const downloadButton = document.getElementById("download-tab");
+    const candidateSection = document.getElementById("candidate-section");
+    const candidateList = document.getElementById("candidate-list");
     const downloadFilename = "guitar-tab-agent-tab.txt";
+    let selectedTabText = "";
+
+    function setSelectedTab(tabText) {{
+      selectedTabText = tabText || "";
+      output.textContent = selectedTabText;
+      downloadButton.disabled = !selectedTabText;
+    }}
+
+    function renderCandidates(candidates) {{
+      candidateList.textContent = "";
+      candidateSection.hidden = !candidates.length;
+      for (const candidate of candidates) {{
+        const label = document.createElement("label");
+        label.className = "candidate-option";
+
+        const input = document.createElement("input");
+        input.type = "radio";
+        input.name = "tab-candidate";
+        input.value = String(candidate.rank);
+        input.checked = candidate.rank === 1;
+        input.addEventListener("change", () => setSelectedTab(candidate.tab));
+
+        const title = document.createElement("span");
+        title.textContent = ` Candidate ${{candidate.rank}} score=${{Number(candidate.score).toFixed(3)}}`;
+
+        const preview = document.createElement("pre");
+        preview.textContent = candidate.tab;
+
+        label.appendChild(input);
+        label.appendChild(title);
+        label.appendChild(preview);
+        candidateList.appendChild(label);
+      }}
+    }}
 
     form.addEventListener("submit", async (event) => {{
       event.preventDefault();
       message.textContent = "";
-      output.textContent = "";
-      downloadButton.disabled = true;
+      setSelectedTab("");
+      renderCandidates([]);
 
       const fileInput = document.getElementById("audio-file");
       const file = fileInput.files[0];
@@ -187,7 +296,7 @@ def render_index_html() -> str:
       }}
 
       const params = new URLSearchParams();
-      for (const id of ["min-confidence", "min-duration", "min-pitch", "max-pitch"]) {{
+      for (const id of ["min-confidence", "min-duration", "min-pitch", "max-pitch", "first-position"]) {{
         const input = document.getElementById(id);
         if (input.value) {{
           params.set(input.name, input.value);
@@ -209,21 +318,22 @@ def render_index_html() -> str:
         return;
       }}
       message.textContent = "";
-      output.textContent = payload.tab;
-      downloadButton.disabled = !payload.tab;
+      const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+      renderCandidates(candidates);
+      setSelectedTab(payload.tab);
     }});
 
     copyButton.addEventListener("click", async () => {{
-      if (output.textContent) {{
-        await navigator.clipboard.writeText(output.textContent);
+      if (selectedTabText) {{
+        await navigator.clipboard.writeText(selectedTabText);
       }}
     }});
 
     downloadButton.addEventListener("click", () => {{
-      if (!output.textContent) {{
+      if (!selectedTabText) {{
         return;
       }}
-      const blob = new Blob([output.textContent], {{ type: "text/plain;charset=utf-8" }});
+      const blob = new Blob([selectedTabText], {{ type: "text/plain;charset=utf-8" }});
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -241,7 +351,7 @@ def render_index_html() -> str:
 
 def create_handler_class(
     *,
-    workflow: AudioToTabWorkflow = transcribe_audio_file_to_ascii_tab,
+    candidates_workflow: AudioToTabCandidatesWorkflow = transcribe_audio_file_to_ascii_tab_candidates,
 ) -> type[BaseHTTPRequestHandler]:
     """Create a local request handler with an injectable workflow for tests."""
 
@@ -269,18 +379,18 @@ def create_handler_class(
                 audio_bytes = self.rfile.read(length)
                 options = parse_audio_to_tab_options(parsed.query)
                 filename = self.headers.get("X-Filename", "upload.wav")
-                tab = generate_tab_from_upload(
+                payload = generate_tab_response_from_upload(
                     audio_bytes,
                     filename=filename,
                     options=options,
-                    workflow=workflow,
+                    workflow=candidates_workflow,
                 )
             except Exception as exc:  # noqa: BLE001 - local UI returns readable errors.
                 status, payload = error_response_for_exception(exc)
                 self._write_json(status, payload)
                 return
 
-            self._write_json(HTTPStatus.OK, {"tab": tab})
+            self._write_json(HTTPStatus.OK, payload)
 
         def log_message(self, format: str, *args: Any) -> None:
             return
@@ -293,7 +403,7 @@ def create_handler_class(
             self.end_headers()
             self.wfile.write(body)
 
-        def _write_json(self, status: HTTPStatus, payload: dict[str, str]) -> None:
+        def _write_json(self, status: HTTPStatus, payload: dict[str, object]) -> None:
             body = json.dumps(payload).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -329,10 +439,12 @@ __all__ = [
     "AudioToTabWebOptions",
     "DEFAULT_HOST",
     "DEFAULT_PORT",
+    "DEFAULT_TOP_K_CANDIDATES",
     "MAX_UPLOAD_BYTES",
     "create_handler_class",
     "error_response_for_exception",
     "generate_tab_from_upload",
+    "generate_tab_response_from_upload",
     "parse_audio_to_tab_options",
     "render_index_html",
     "run_local_web_ui",
