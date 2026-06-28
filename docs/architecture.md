@@ -2,27 +2,30 @@
 
 ## 1. System Overview
 
-The system generates editable guitar TAB drafts from fixed-camera guitar performance videos. It combines audio-derived note events, video-derived hand and fretboard evidence, and guitar-specific playability constraints.
+The public-alpha system generates editable guitar TAB drafts from short, clean guitar audio. It combines audio-derived note events, guitar-specific string/fret candidate generation, playability constraints, ergonomic scoring, and human review.
+
+Video-assisted evidence is future work. The architecture keeps video, calibration, and hand-evidence modules decoupled so future releases can add left-hand and fretboard evidence without changing the audio-only public MVP claim.
 
 The architecture is intentionally modular so coding agents can work on one layer at a time without changing the full pipeline. Each module owns clear inputs, outputs, and failure modes. Early versions should use simple deterministic logic before introducing more complex decoders or model integrations.
 
 Primary modules:
 
-- `audio`: extracts audio and produces `NoteEvent` records.
-- `video`: produces time-aligned visual evidence such as fretboard calibration and hand landmarks.
-- `fusion`: selects string/fret positions from audio notes and visual/playability evidence.
+- `audio`: produces `NoteEvent` records from local audio files.
+- `fusion`: selects string/fret positions from audio notes, optional evidence, and playability constraints.
 - `tab rendering`: exports JSON and ASCII TAB first.
 - `CLI`: exposes pipeline steps through the `tabgen` command for local development and batch use.
-- `future web UI`: later supports upload, calibration, preview, and correction.
+- `local web UI`: supports local audio upload, candidate preview, and TAB copy/download.
+- `video`: future module for time-aligned visual evidence such as fretboard calibration and hand landmarks.
 
 Source layout:
 
 ```text
 src/guitar_tab_agent/
-  audio/      audio extraction and audio-to-note adapters
-  video/      frame extraction, calibration, and hand tracking
+  audio/      audio-to-note adapters and note filtering
+  video/      future frame extraction, calibration, and hand tracking
   fusion/     string/fret candidate generation, scoring, and decoding
   tab/        ASCII TAB rendering and later export adapters
+  web/        minimal local audio-to-TAB UI
   cli.py      implementation for the `tabgen` command
   schema.py   canonical shared dataclasses
   models.py   compatibility wrappers for early skeleton APIs
@@ -32,14 +35,36 @@ The Python package is `guitar_tab_agent`. The CLI command is `tabgen`; do not re
 
 ## 2. Data Flow
 
+Current public-alpha audio-only flow:
+
 ```text
-input video
+input audio
   |
   +-- audio module
   |     |
-  |     +-- audio extraction
   |     +-- audio-to-note adapter
+  |     +-- note filtering and chronological sorting
   |     +-- NoteEvent[]
+  |
+  +-- fusion module
+  |     |
+  |     +-- pitch-to-string/fret candidates
+  |     +-- ergonomic scoring
+  |     +-- optional first-position and left-hand-likelihood hints
+  |     +-- ranked candidate decoder
+  |     +-- DecodedTabEvent[]
+  |
+  +-- tab rendering
+        |
+        +-- JSON output
+        +-- ASCII TAB output
+        +-- ranked TAB candidates for review
+```
+
+Future multimodal flow:
+
+```text
+input video or time-aligned frame data
   |
   +-- video module
   |     |
@@ -49,17 +74,9 @@ input video
   |     +-- time-aligned VideoEvidence[]
   |
   +-- fusion module
-  |     |
-  |     +-- pitch-to-string/fret candidates
-  |     +-- scoring
-  |     +-- deterministic initial decoder
-  |     +-- later Viterbi or beam search decoder
-  |     +-- DecodedTabEvent[]
-  |
-  +-- tab rendering
         |
-        +-- JSON output
-        +-- ASCII TAB output
+        +-- combine audio pitch constraints, visual evidence, and playability costs
+        +-- reduce string/fret ambiguity where visual evidence is reliable
 ```
 
 Intermediate files should be serializable so later steps can be rerun without repeating expensive extraction. This also makes debugging easier when agents implement modules independently.
@@ -82,7 +99,7 @@ Produced by the audio module.
 
 ### `FretboardCalibration`
 
-Produced by manual calibration in the video module.
+Produced by future manual calibration in the video module.
 
 - `nut_string_6`: optional image-space point.
 - `nut_string_1`: optional image-space point.
@@ -90,11 +107,11 @@ Produced by manual calibration in the video module.
 - `bridge_string_1`: optional image-space point.
 - `timestamp`: optional frame time used for calibration.
 
-Perspective transforms and normalized fretboard mapping are future video-module work, not part of the schema layer.
+Perspective transforms and normalized fretboard mapping are future video-module work, not part of the current audio-only public MVP.
 
 ### `HandLandmarkFrame`
 
-Produced by video hand tracking.
+Produced by future video hand tracking.
 
 - `timestamp`: frame timestamp.
 - `landmarks`: named project-level landmarks as `(name, x, y)` tuples.
@@ -104,7 +121,7 @@ MediaPipe-specific objects must stay inside the video adapter layer.
 
 ### `VideoEvidence`
 
-Time-aligned visual evidence consumed by fusion.
+Time-aligned visual evidence consumed by fusion in future multimodal workflows.
 
 - `timestamp_sec`: evidence time.
 - `left_hand_likelihood`: optional probability-like scores by string/fret or fret region.
@@ -136,7 +153,7 @@ Score breakdowns and `needs_review` markers are planned decoder/review-output ex
 
 ## 4. Future Instrument and Tuning Profiles
 
-Phase 0 and Phase 1 remain fixed to six-string standard-tuning guitar. The current candidate generation, decoder, ASCII renderer, and CLI should not claim support for 7-string guitar, bass guitar, or custom tunings yet.
+Phase 0 and Phase 1 remain fixed to six-string standard-tuning guitar. The current candidate generation, decoder, ASCII renderer, CLI, and local web UI should not claim support for 7-string guitar, bass guitar, or custom tunings yet.
 
 Future support should be introduced through a small `InstrumentProfile` design rather than scattered constants. A profile may eventually describe:
 
@@ -158,31 +175,31 @@ Until then, new code may continue to use the current six-string standard-tuning 
 
 Responsibilities:
 
-- Extract audio from a local video file.
+- Read local audio files.
 - Run an audio-to-note adapter.
 - Normalize results into `NoteEvent` records.
 - Hide tool-specific output formats from the rest of the system.
 
-Initial tools may include `ffmpeg` and Basic Pitch. Demucs can be added later as an optional preprocessing step for guitar stem extraction.
+Initial tools may include Basic Pitch. `ffmpeg` and Demucs can be added later as optional preprocessing steps when the related workflow is explicitly scoped.
 
 ### Video
 
-Responsibilities:
+Responsibilities for future multimodal work:
 
 - Extract frames or read frame timestamps.
 - Store and load manual fretboard calibration.
 - Convert image coordinates into fretboard-relative evidence.
 - Produce hand landmarks and likelihoods aligned to media time.
 
-Initial MVP can use manual calibration and mocked/synthetic visual evidence before full MediaPipe integration.
+Video evidence is not required for the current public-alpha audio-only path. Future video work can use manual calibration and mocked/synthetic visual evidence before full MediaPipe integration.
 
 ### Fusion
 
 Responsibilities:
 
 - Enumerate valid string/fret candidates from each `NoteEvent` under the current six-string standard-tuning MVP constraint.
-- Combine pitch constraints, left-hand likelihood, right-hand likelihood, playability prior, and transition cost.
-- Decode a sequence of `DecodedTabEvent` records.
+- Combine pitch constraints, optional left-hand likelihood, optional right-hand likelihood, playability prior, and transition cost.
+- Decode one or more ranked sequences of `DecodedTabEvent` records.
 - Preserve score breakdowns for debugging and correction.
 
 The initial decoder should be simple and deterministic, such as lowest-cost candidate selection with a basic movement penalty. Later versions can use Viterbi or beam search when transitions and polyphony become more important.
@@ -205,62 +222,45 @@ Responsibilities:
 - Support rerunning individual steps from intermediate JSON files.
 - Surface clear errors for unsupported inputs and missing dependencies.
 
-Expected future commands:
+Current public-alpha commands include:
 
-- `tabgen extract-audio`
-- `tabgen detect-notes`
-- `tabgen calibrate`
-- `tabgen fuse`
-- `tabgen render`
-- `tabgen generate`
+- `tabgen candidates`
+- `tabgen notes-to-tab`
+- `tabgen audio-to-notes`
+- `tabgen audio-to-tab`
+- `tabgen web`
 
-### Future Web UI
+Video-related helper commands are experimental/future-facing and should not be described as the public MVP.
+
+### Local Web UI
 
 Responsibilities:
 
-- Upload or select a local video.
-- Guide manual fretboard calibration.
-- Preview detected notes and visual evidence.
-- Edit generated TAB interactively.
-- Export JSON and ASCII TAB first, with richer formats later.
+- Upload or select a local audio file.
+- Preview generated TAB candidates.
+- Copy or download ASCII TAB output.
+- Keep uploads local to the user's machine in the default development workflow.
 
-The web UI should call the same core modules as the CLI rather than duplicating pipeline logic.
+The local web UI should call the same core modules as the CLI rather than duplicating pipeline logic.
 
 ### Local-First Frontend and API Integration
 
-The core engine should remain UI-independent. CLI commands, future local API
-handlers, a local web UI, desktop packaging, and any optional cloud layer should
-all call the same reusable backend workflows instead of duplicating pipeline
-logic.
+The core engine should remain UI-independent. CLI commands, future local API handlers, a local web UI, desktop packaging, and any optional cloud layer should all call the same reusable backend workflows instead of duplicating pipeline logic.
 
 Intended layers:
 
-- Core engine: shared schemas, pitch-to-string/fret candidates, decoder, and
-  TAB renderer.
-- Adapters: Basic Pitch, MediaPipe, `ffmpeg` frame extraction, and other
-  optional dependency boundaries.
-- Workflows: reusable orchestration functions such as `audio_to_notes`,
-  `audio_to_tab`, `video_to_landmarks`, and future `multimodal_to_tab`.
-- Interfaces: `tabgen` CLI now; later local API, local web UI, and desktop app;
-  optional cloud/API layers only after local quality and UX are validated.
+- Core engine: shared schemas, pitch-to-string/fret candidates, decoder, and TAB renderer.
+- Adapters: Basic Pitch, future MediaPipe, `ffmpeg` frame extraction, and other optional dependency boundaries.
+- Workflows: reusable orchestration functions such as `audio_to_notes`, `audio_to_tab`, future `video_to_landmarks`, and future `multimodal_to_tab`.
+- Interfaces: `tabgen` CLI and local web UI now; later local API and desktop app; optional cloud/API layers only after local quality and UX are validated.
 
-The CLI should stay a thin wrapper around workflow functions. Future frontend
-or API code should pass user inputs to those workflows and render their outputs,
-not reimplement note filtering, decoding, rendering, adapter calls, or error
-handling in UI-specific layers.
+The CLI should stay a thin wrapper around workflow functions. Future frontend or API code should pass user inputs to those workflows and render their outputs, not reimplement note filtering, decoding, rendering, adapter calls, or error handling in UI-specific layers.
 
-Optional dependencies should stay isolated in adapter modules and be imported
-lazily only when the related feature is requested. This keeps the local CLI and
-future interfaces usable without installing every audio, video, or ML tool.
+Optional dependencies should stay isolated in adapter modules and be imported lazily only when the related feature is requested. This keeps the local CLI and future interfaces usable without installing every audio, video, or ML tool.
 
-The near-term product direction is local-first: CLI now, local API/local web UI
-later, desktop app packaging after the workflow is useful, and optional
-cloud/SaaS only after core quality and UX are validated. Mobile/iOS is a future
-capture companion direction, not the first product target.
+The near-term product direction is local-first: CLI and local web UI now, local API later, desktop app packaging after the workflow is useful, and optional cloud/SaaS only after core quality and UX are validated. Mobile/iOS is a future capture companion direction, not the first product target.
 
-Do not commit real audio/video files, generated JSON or TAB outputs, generated
-plots, or executed notebook outputs. Keep committed fixtures small,
-deterministic, and human-readable.
+Do not commit real audio/video files, generated JSON or TAB outputs, generated plots, or executed notebook outputs. Keep committed fixtures small, deterministic, and human-readable.
 
 ## 6. Coordinate Systems
 
@@ -268,7 +268,7 @@ Time coordinates:
 
 - Use seconds from media start as the canonical time base.
 - Preserve original frame timestamps when available.
-- Align video evidence to note events by timestamp windows, not by frame index alone.
+- Align future video evidence to note events by timestamp windows, not by frame index alone.
 
 Image coordinates:
 
@@ -279,24 +279,18 @@ Image coordinates:
 
 Manual fretboard calibration:
 
-- Phase 1 starts with a manually supplied calibration JSON file, not automatic
-  fretboard detection.
-- Required points are `nut_string6`, `nut_string1`, `high_fret_string6`, and
-  `high_fret_string1`.
+- Future video work may start with a manually supplied calibration JSON file, not automatic fretboard detection.
+- Required points are `nut_string6`, `nut_string1`, `high_fret_string6`, and `high_fret_string1`.
 - Each point is an image-space `[x, y]` pixel coordinate.
-- The JSON contract stores `video_id`, `frame_time`, `image_width`,
-  `image_height`, and a `points` object containing the four required points.
+- The JSON contract stores `video_id`, `frame_time`, `image_width`, `image_height`, and a `points` object containing the four required points.
 
 Fretboard coordinates:
 
 - For the MVP, string numbering follows six-string guitar TAB convention: string 1 is high E, string 6 is low E.
 - Fret numbering starts at 0 for open strings.
-- Normalized fretboard coordinate `u` runs from the nut toward the
-  bridge/high-fret direction.
-- Normalized fretboard coordinate `v` runs from the string 6 side toward the
-  string 1 side.
-- Points inside the calibrated quadrilateral should map approximately into
-  `[0, 1] x [0, 1]`.
+- Normalized fretboard coordinate `u` runs from the nut toward the bridge/high-fret direction.
+- Normalized fretboard coordinate `v` runs from the string 6 side toward the string 1 side.
+- Points inside the calibrated quadrilateral should map approximately into `[0, 1] x [0, 1]`.
 - Standard tuning MIDI pitches are explicit:
   - string 1: E4, MIDI 64
   - string 2: B3, MIDI 59
@@ -315,7 +309,7 @@ Errors should be explicit and recoverable when possible.
 - Unsupported tuning or guitar type should fail before decoding.
 - Missing external tools should report the tool name and suggested installation path.
 - Invalid media files should fail in audio/video extraction, not inside fusion.
-- Missing or stale calibration should produce a clear calibration-required error.
+- Missing or stale calibration should produce a clear calibration-required error for future video workflows.
 - Low-confidence notes or occluded landmarks should become warnings and `needs_review` markers when the pipeline can continue.
 - JSON schema version mismatches should produce clear migration or incompatibility messages.
 
@@ -332,10 +326,10 @@ Modules should avoid swallowing errors from external tools. Wrap them with proje
 
 Likely dependency boundaries:
 
-- `ffmpeg`: media extraction, likely external command dependency.
 - Basic Pitch: audio-to-note adapter.
-- OpenCV: frame extraction and image handling.
-- MediaPipe: hand landmark detection.
+- `ffmpeg`: optional media extraction boundary.
+- OpenCV: future frame extraction and image handling.
+- MediaPipe: future hand landmark detection.
 - Demucs: optional future guitar stem separation.
 
 ## 9. Testing Strategy
@@ -358,6 +352,7 @@ Each module should be testable without running the full pipeline.
 
 - Viterbi or beam search sequence decoding.
 - Polyphonic note grouping and chord-aware fingering.
+- Preferred-position hints and correction workflows for human-in-the-loop review.
 - Right-hand string likelihood from picking-hand video evidence.
 - Better left-hand likelihood using MediaPipe landmarks and calibrated fretboard geometry.
 - Optional Demucs preprocessing for guitar-forward but noisy recordings.
