@@ -10,6 +10,12 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.optional-dependencies]
+audio = [
+    "basic-pitch",
+    "setuptools>=69",
+]
+
 [project.scripts]
 tabgen = "guitar_tab_agent.cli:main"
 
