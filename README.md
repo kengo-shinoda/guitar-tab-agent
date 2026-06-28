@@ -1,18 +1,27 @@
 # guitar-tab-agent
 
-`guitar-tab-agent` generates editable guitar TAB drafts from guitar performance
-inputs. The current short-term focus is an audio-only CLI MVP for clean,
-monophonic guitar phrases.
+`guitar-tab-agent` is a local-first tool for turning short, clean guitar audio
+into playable, editable guitar TAB drafts.
+
+Unlike generic audio transcription, guitar TAB generation has a structural
+ambiguity: the same pitch can usually be played on multiple string/fret
+positions. This project exposes that ambiguity by generating multiple TAB
+candidates for human review, rather than claiming to recover exact ground-truth
+fingering from audio alone.
+
+The current short-term focus is an audio-only CLI and local web MVP for clean,
+monophonic or mostly single-note guitar phrases.
 
 The Python package is `guitar_tab_agent`. The CLI command is `tabgen`.
 
 ## Current Status
 
-The project is in audio-only CLI MVP development. The known-good path is:
+The project is in audio-only CLI/local web MVP development. The known-good path
+is:
 
 ```text
 audio input -> Basic Pitch NoteEvents -> chronological sorting
-            -> ergonomic decoder -> ASCII TAB
+            -> ergonomic decoder -> ASCII TAB candidates
 ```
 
 The output should be treated as a playable, editable TAB draft. It is not a
@@ -126,8 +135,8 @@ uv run tabgen web --open-browser
 ## Important Limitations
 
 - Audio alone cannot uniquely determine exact guitar string/fret positions.
-- The current decoder chooses a playable ergonomic fingering path, not observed
-  ground-truth fingering.
+- The current decoder chooses playable ergonomic fingering candidates, not
+  observed ground-truth fingering.
 - The current target is clean monophonic or mostly single-note guitar phrases.
 - Chords, bends, heavy distortion, full-mix source separation, and exact
   technique notation are not solved yet.
@@ -137,12 +146,25 @@ uv run tabgen web --open-browser
   no editing UI, no waveform display, no source separation, and no video/hand
   tracking controls.
 
+## License and commercial use
+
+The open-source core is released under the Apache License 2.0. The public
+repository is intended to provide the local-first engine, CLI, development web
+UI, and documentation.
+
+Hosted services, mobile applications, account systems, billing, and polished
+commercial user experiences can be developed as separate layers on top of this
+core. Any commercial deployment should also review the licenses of optional
+third-party dependencies and avoid using unlicensed third-party audio or video
+material in demos, tests, or user-facing examples.
+
 ## Deeper Docs
 
 - [Audio-only MVP scope](docs/audio_only_mvp.md)
 - [Audio-only smoke checkpoint](docs/audio_only_smoke_checkpoint.md)
 - [Local web UI smoke checkpoint](docs/local_web_smoke_checkpoint.md)
 - [Architecture](docs/architecture.md)
+- [Current state handoff](docs/current_state.md)
 - Future/advanced video material:
   - [Real-image hand landmark smoke test](docs/real_image_hand_landmark_smoke.md)
   - [Video-assisted smoke test](docs/video_assisted_smoke_test.md)
