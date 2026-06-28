@@ -7,6 +7,7 @@ from pathlib import Path
 
 from guitar_tab_agent.audio.basic_pitch_adapter import BasicPitchUnavailableError
 from guitar_tab_agent.fusion.simple_decoder import FingeringPosition
+from guitar_tab_agent.schema import DecodedTabEvent
 from guitar_tab_agent.web.local_app import (
     AudioToTabWebOptions,
     create_handler_class,
@@ -17,6 +18,24 @@ from guitar_tab_agent.web.local_app import (
     render_index_html,
 )
 from guitar_tab_agent.workflows import RenderedTabCandidate
+
+
+def _decoded_event(
+    index: int,
+    *,
+    pitch_midi: int,
+    string: int,
+    fret: int,
+) -> DecodedTabEvent:
+    start = (index - 1) * 0.25
+    return DecodedTabEvent(
+        start=start,
+        end=start + 0.2,
+        string=string,
+        fret=fret,
+        pitch_midi=pitch_midi,
+        confidence=0.9,
+    )
 
 
 def test_parse_audio_to_tab_options() -> None:
@@ -137,8 +156,21 @@ def test_generate_tab_response_from_upload_returns_tab_and_candidates() -> None:
         assert min_confidence == 0.55
         assert first_position == FingeringPosition(string=5, fret=0)
         return (
-            RenderedTabCandidate(rank=1, score=7.7, tab="candidate one", events=()),
-            RenderedTabCandidate(rank=2, score=13.7, tab="candidate two", events=()),
+            RenderedTabCandidate(
+                rank=1,
+                score=7.7,
+                tab="candidate one",
+                events=(
+                    _decoded_event(1, pitch_midi=45, string=5, fret=0),
+                    _decoded_event(2, pitch_midi=55, string=4, fret=5),
+                ),
+            ),
+            RenderedTabCandidate(
+                rank=2,
+                score=13.7,
+                tab="candidate two",
+                events=(_decoded_event(1, pitch_midi=45, string=5, fret=0),),
+            ),
         )
 
     payload = generate_tab_response_from_upload(
@@ -154,10 +186,58 @@ def test_generate_tab_response_from_upload_returns_tab_and_candidates() -> None:
     assert payload == {
         "tab": "candidate one",
         "candidates": [
-            {"rank": 1, "score": 7.7, "tab": "candidate one"},
-            {"rank": 2, "score": 13.7, "tab": "candidate two"},
+            {
+                "rank": 1,
+                "score": 7.7,
+                "tab": "candidate one",
+                "events": [
+                    {
+                        "index": 1,
+                        "start": 0.0,
+                        "end": 0.2,
+                        "pitch_midi": 45,
+                        "string": 5,
+                        "fret": 0,
+                    },
+                    {
+                        "index": 2,
+                        "start": 0.25,
+                        "end": 0.45,
+                        "pitch_midi": 55,
+                        "string": 4,
+                        "fret": 5,
+                    },
+                ],
+            },
+            {
+                "rank": 2,
+                "score": 13.7,
+                "tab": "candidate two",
+                "events": [
+                    {
+                        "index": 1,
+                        "start": 0.0,
+                        "end": 0.2,
+                        "pitch_midi": 45,
+                        "string": 5,
+                        "fret": 0,
+                    }
+                ],
+            },
         ],
     }
+
+
+def test_generate_tab_response_from_upload_preserves_empty_candidates_fallback() -> None:
+    payload = generate_tab_response_from_upload(
+        b"audio bytes",
+        filename="input.wav",
+        options=AudioToTabWebOptions(),
+        workflow=lambda audio_path, **kwargs: (),
+    )
+
+    assert payload["tab"] == "e|\nB|\nG|\nD|\nA|\nE|"
+    assert payload["candidates"] == []
 
 
 def test_error_response_for_missing_basic_pitch_is_readable() -> None:
@@ -183,8 +263,21 @@ def test_generate_endpoint_returns_tab_and_candidates_json() -> None:
     def fake_candidates_workflow(audio_path, **kwargs):
         calls.append(kwargs)
         return (
-            RenderedTabCandidate(rank=1, score=1.0, tab="best tab", events=()),
-            RenderedTabCandidate(rank=2, score=2.0, tab="other tab", events=()),
+            RenderedTabCandidate(
+                rank=1,
+                score=1.0,
+                tab="best tab",
+                events=(
+                    _decoded_event(1, pitch_midi=45, string=5, fret=0),
+                    _decoded_event(2, pitch_midi=55, string=4, fret=5),
+                ),
+            ),
+            RenderedTabCandidate(
+                rank=2,
+                score=2.0,
+                tab="other tab",
+                events=(_decoded_event(1, pitch_midi=47, string=5, fret=2),),
+            ),
         )
 
     handler_class = create_handler_class(candidates_workflow=fake_candidates_workflow)
@@ -217,8 +310,44 @@ def test_generate_endpoint_returns_tab_and_candidates_json() -> None:
     assert calls[0]["first_position"] == FingeringPosition(string=5, fret=0)
     assert payload["tab"] == "best tab"
     assert payload["candidates"] == [
-        {"rank": 1, "score": 1.0, "tab": "best tab"},
-        {"rank": 2, "score": 2.0, "tab": "other tab"},
+        {
+            "rank": 1,
+            "score": 1.0,
+            "tab": "best tab",
+            "events": [
+                {
+                    "index": 1,
+                    "start": 0.0,
+                    "end": 0.2,
+                    "pitch_midi": 45,
+                    "string": 5,
+                    "fret": 0,
+                },
+                {
+                    "index": 2,
+                    "start": 0.25,
+                    "end": 0.45,
+                    "pitch_midi": 55,
+                    "string": 4,
+                    "fret": 5,
+                },
+            ],
+        },
+        {
+            "rank": 2,
+            "score": 2.0,
+            "tab": "other tab",
+            "events": [
+                {
+                    "index": 1,
+                    "start": 0.0,
+                    "end": 0.2,
+                    "pitch_midi": 47,
+                    "string": 5,
+                    "fret": 2,
+                }
+            ],
+        },
     ]
 
 
