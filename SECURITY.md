@@ -10,6 +10,11 @@ target the default branch unless a release branch is created in the future.
 The local web UI is intended for personal local use, typically bound to
 `127.0.0.1`. It is not designed to be exposed directly to the public internet.
 
+See also:
+
+- [Local web upload handling review](docs/local_web_upload_handling.md)
+- [Demo material policy](docs/demo_material_policy.md)
+
 Do not deploy the current local web UI as a public service without adding and
 reviewing at least the following:
 

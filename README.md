@@ -165,6 +165,8 @@ material in demos, tests, or user-facing examples.
 - [Local web UI smoke checkpoint](docs/local_web_smoke_checkpoint.md)
 - [Architecture](docs/architecture.md)
 - [Current state handoff](docs/current_state.md)
+- [Demo material policy](docs/demo_material_policy.md)
+- [Local web upload handling review](docs/local_web_upload_handling.md)
 - [Codex for OSS maintenance plan](docs/codex_for_oss_plan.md)
 - [Public alpha release checklist](docs/public_alpha_release_checklist.md)
 - Future/advanced video material:
