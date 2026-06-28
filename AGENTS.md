@@ -1,37 +1,47 @@
 # AGENTS.md
 
-This project builds a video-assisted guitar tablature transcription app.
+This project currently builds a local-first, audio-only guitar tablature draft generator. The public MVP turns short, clean guitar audio into editable, human-reviewable TAB candidates.
+
+Video-assisted evidence is future work. Future versions may use fretboard calibration and left-hand evidence to reduce string/fret ambiguity, but the current public-alpha path should be framed as audio-only unless a specific issue asks for video work.
 
 ## Product goal
 
-Generate editable guitar tablature from guitar performance videos by combining:
-- audio transcription,
-- hand/fretboard video evidence,
+Generate editable guitar tablature drafts by combining:
+- audio-derived note events,
 - guitar-specific playability constraints,
-- human-in-the-loop correction.
+- ranked string/fret candidate generation,
+- ergonomic scoring,
+- human-in-the-loop review and correction.
 
-The MVP target is not perfect publication-quality notation. The MVP target is a useful, editable TAB candidate that reduces manual transcription effort.
+Future multimodal work may add:
+- hand/fretboard video evidence,
+- manual fretboard calibration,
+- left-hand likelihood signals,
+- right-hand string evidence.
+
+The MVP target is not perfect publication-quality notation. The MVP target is a useful, editable TAB candidate that reduces manual transcription effort while making ambiguity visible.
 
 ## Core principles
 
 - Avoid reinventing wheels.
 - Prefer existing open-source models and libraries.
 - Do not train custom models unless an issue explicitly requests it.
-- Keep audio, video, fusion, and output layers decoupled.
+- Keep audio, future video, fusion, and output layers decoupled.
 - Use deterministic, testable components where possible.
 - Favor transparent scoring and confidence outputs over black-box behavior.
 - Every implementation PR must include tests or a clear explanation why tests are not possible.
 
 ## MVP constraints
 
+- Audio-only public MVP.
 - Standard tuning only.
 - Six-string guitar only.
-- Phase 0 and Phase 1 are intentionally limited to six-string standard-tuning guitar.
-- Manual fretboard calibration first.
-- Fixed-camera videos first.
-- Solo guitar or guitar-forward recordings first.
+- Short, clean, guitar-forward audio first.
+- Monophonic or mostly single-note phrases first.
 - ASCII TAB and JSON outputs first.
-- MusicXML, GuitarPro, and web UI are later phases.
+- Local CLI and minimal local web UI first.
+- Candidate review and correction workflows before broader notation export.
+- Video/left-hand evidence is future work, not the public-alpha claim.
 - 7-string guitar, bass guitar, and custom tunings are future work; do not implement them unless an issue explicitly requests it.
 - No automatic model training in MVP.
 
@@ -40,10 +50,11 @@ The MVP target is not perfect publication-quality notation. The MVP target is a 
 - Python package name: `guitar_tab_agent`.
 - CLI command name: `tabgen`.
 - `tabgen` is the command-line executable, not the Python package name.
-- `src/guitar_tab_agent/audio/`: audio extraction and audio-to-note adapters.
-- `src/guitar_tab_agent/video/`: frame extraction, calibration, hand tracking.
+- `src/guitar_tab_agent/audio/`: audio-to-note adapters and note filtering.
+- `src/guitar_tab_agent/video/`: future frame extraction, calibration, and hand tracking.
 - `src/guitar_tab_agent/fusion/`: string/fret candidate generation, cost model, decoding.
 - `src/guitar_tab_agent/tab/`: TAB rendering and export.
+- `src/guitar_tab_agent/web/`: minimal local web UI for audio-to-TAB workflows.
 - `src/guitar_tab_agent/cli.py`: command-line interface backing the `tabgen` command.
 - `docs/`: product requirements, architecture, evaluation, roadmap.
 - `tests/`: unit and integration tests.
@@ -76,8 +87,9 @@ The MVP target is not perfect publication-quality notation. The MVP target is a 
 Treat the following as high-priority issues:
 - Wrong pitch-to-string/fret mapping.
 - Hidden assumptions about tuning.
-- Premature support claims for 7-string guitar, bass guitar, or custom tunings.
-- Unclear coordinate systems.
+- Premature support claims for 7-string guitar, bass guitar, custom tunings, dense polyphony, or exact observed fingering recovery.
+- Confusing the audio-only public MVP with future video-assisted work.
+- Unclear coordinate systems in future video modules.
 - Unstable public interfaces.
 - Unnecessary dependency additions.
 - Changes that make later multimodal fusion difficult.
