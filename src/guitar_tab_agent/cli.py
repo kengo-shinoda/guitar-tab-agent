@@ -182,7 +182,7 @@ def _parse_first_position_arg(args: argparse.Namespace):
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="tabgen",
-        description="Generate editable guitar TAB candidates from performance videos.",
+        description="Generate editable guitar TAB candidates from short, clean audio.",
     )
     parser.add_argument(
         "--version",
