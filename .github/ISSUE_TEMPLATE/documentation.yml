@@ -1,0 +1,34 @@
+name: Documentation improvement
+description: Suggest a correction or improvement to project documentation
+title: "Docs: "
+labels: ["documentation"]
+body:
+  - type: textarea
+    id: location
+    attributes:
+      label: Documentation location
+      description: Which file, section, or page should be improved?
+      placeholder: "Example: README.md > Important Limitations"
+    validations:
+      required: true
+  - type: textarea
+    id: issue
+    attributes:
+      label: Problem
+      description: What is unclear, outdated, missing, or misleading?
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested improvement
+      description: Proposed wording or structure, if any.
+    validations:
+      required: false
+  - type: checkboxes
+    id: framing
+    attributes:
+      label: Product framing check
+      options:
+        - label: This documentation change keeps the current MVP framed as local-first, audio-only, candidate-based TAB draft generation.
+          required: true
